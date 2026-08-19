@@ -3,132 +3,13 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../Tema/app_tema.dart';
 import '../widgets/bottom_nav.dart';
 import '../services/aquario_service.dart';
+import '../services/peixe_service.dart';
 import 'tela_inicial.dart';
 import 'tela_aquarios.dart';
 import 'tela_clientes.dart';
 
 // ═══════════════════════════════════════════════════════════
-// CATÁLOGO DE ESPÉCIES (mockado — virá da tabela `especie`)
-// ═══════════════════════════════════════════════════════════
-class Especie {
-  final String id;
-  final String nomeComum;
-  final String nomeCientifico;
-  final double tempMin;
-  final double tempMax;
-  final double phMin;
-  final double phMax;
-  final int volumeMinimo;
-  final String comportamento; // pacifico | territorial | agressivo
-  final String agrupamento;   // cardume | par | solitario
-  final int? cardumeMinimo;
-  final String dificuldade;   // facil | medio | dificil
-  final String alimentacao;
-  final Color cor;
-
-  const Especie({
-    required this.id,
-    required this.nomeComum,
-    required this.nomeCientifico,
-    required this.tempMin,
-    required this.tempMax,
-    required this.phMin,
-    required this.phMax,
-    required this.volumeMinimo,
-    required this.comportamento,
-    required this.agrupamento,
-    this.cardumeMinimo,
-    required this.dificuldade,
-    required this.alimentacao,
-    required this.cor,
-  });
-}
-
-const List<Especie> catalogoEspecies = [
-  Especie(
-    id: 'e1',
-    nomeComum: 'Neon Tetra',
-    nomeCientifico: 'Paracheirodon innesi',
-    tempMin: 20, tempMax: 26,
-    phMin: 6, phMax: 7,
-    volumeMinimo: 40,
-    comportamento: 'pacifico',
-    agrupamento: 'cardume',
-    cardumeMinimo: 10,
-    dificuldade: 'facil',
-    alimentacao: 'Onívoro — ração em flocos e alimento vivo',
-    cor: Color(0xFF2E86C1),
-  ),
-  Especie(
-    id: 'e2',
-    nomeComum: 'Betta',
-    nomeCientifico: 'Betta splendens',
-    tempMin: 24, tempMax: 28,
-    phMin: 6.5, phMax: 7.5,
-    volumeMinimo: 10,
-    comportamento: 'territorial',
-    agrupamento: 'solitario',
-    dificuldade: 'facil',
-    alimentacao: 'Carnívoro — ração específica e larvas',
-    cor: Color(0xFFC0392B),
-  ),
-  Especie(
-    id: 'e3',
-    nomeComum: 'Coridora Panda',
-    nomeCientifico: 'Corydoras panda',
-    tempMin: 22, tempMax: 26,
-    phMin: 6, phMax: 7.4,
-    volumeMinimo: 60,
-    comportamento: 'pacifico',
-    agrupamento: 'cardume',
-    cardumeMinimo: 6,
-    dificuldade: 'facil',
-    alimentacao: 'Onívoro de fundo — pastilhas',
-    cor: Color(0xFF566573),
-  ),
-  Especie(
-    id: 'e4',
-    nomeComum: 'Acará Disco',
-    nomeCientifico: 'Symphysodon aequifasciatus',
-    tempMin: 28, tempMax: 30,
-    phMin: 5.5, phMax: 6.5,
-    volumeMinimo: 200,
-    comportamento: 'pacifico',
-    agrupamento: 'cardume',
-    cardumeMinimo: 5,
-    dificuldade: 'dificil',
-    alimentacao: 'Carnívoro — alimento congelado e ração premium',
-    cor: Color(0xFFCA6F1E),
-  ),
-  Especie(
-    id: 'e5',
-    nomeComum: 'Barbo Sumatra',
-    nomeCientifico: 'Puntigrus tetrazona',
-    tempMin: 23, tempMax: 27,
-    phMin: 6, phMax: 7.5,
-    volumeMinimo: 80,
-    comportamento: 'agressivo',
-    agrupamento: 'cardume',
-    cardumeMinimo: 8,
-    dificuldade: 'medio',
-    alimentacao: 'Onívoro — flocos e vegetais',
-    cor: Color(0xFFD4AC0D),
-  ),
-];
-
-// ═══════════════════════════════════════════════════════════
-// RESULTADO DA ANÁLISE DE COMPATIBILIDADE
-// ═══════════════════════════════════════════════════════════
-enum NivelCompat { otimo, atencao, incompativel }
-
-class Compatibilidade {
-  final NivelCompat nivel;
-  final List<String> avisos;
-  const Compatibilidade(this.nivel, this.avisos);
-}
-
-// ═══════════════════════════════════════════════════════════
-// TELA
+// TELA DE PEIXES — conectada à API
 // ═══════════════════════════════════════════════════════════
 class TelaPeixes extends StatefulWidget {
   final String tipoUsuario;
@@ -153,18 +34,32 @@ class _TelaPeixesState extends State<TelaPeixes> {
     ),
   ];
 
+  // Paleta usada para dar identidade visual a cada espécie
+  static const List<Color> _paleta = [
+    Color(0xFF2E86C1), Color(0xFFC0392B), Color(0xFF566573),
+    Color(0xFFCA6F1E), Color(0xFFD4AC0D), Color(0xFF7B5CD6),
+    Color(0xFF00A878), Color(0xFFD6337F),
+  ];
+
   final _buscaCtrl = TextEditingController();
   String _busca = '';
-  final Set<String> _abertos = {};
 
   List<Map<String, dynamic>> _aquarios = [];
   Map<String, dynamic>? _aquarioSelecionado;
-  bool _carregandoAquarios = true;
+
+  List<Map<String, dynamic>> _especies = [];
+  Map<String, Map<String, dynamic>> _compat = {};
+  List<Map<String, dynamic>> _habitantes = [];
+
+  final Set<String> _abertos = {};
+  bool _carregando = true;
+  bool _habitantesAbertos = true;
+  String? _erro;
 
   @override
   void initState() {
     super.initState();
-    _carregarAquarios();
+    _carregarTudo();
   }
 
   @override
@@ -173,71 +68,115 @@ class _TelaPeixesState extends State<TelaPeixes> {
     super.dispose();
   }
 
-  Future<void> _carregarAquarios() async {
-    final resultado = await AquarioService.listar();
-    if (!mounted) return;
+  // ─── Carregamento ───────────────────────────────────────
+  Future<void> _carregarTudo() async {
     setState(() {
-      _carregandoAquarios = false;
-      if (resultado['sucesso'] == true) {
-        _aquarios = List<Map<String, dynamic>>.from(resultado['dados']);
-        if (_aquarios.isNotEmpty) _aquarioSelecionado = _aquarios.first;
-      }
+      _carregando = true;
+      _erro = null;
     });
+
+    final respAquarios = await AquarioService.listar();
+    final respEspecies = await PeixeService.listarEspecies(busca: _busca);
+    if (!mounted) return;
+
+    if (respAquarios['sucesso'] != true) {
+      setState(() {
+        _carregando = false;
+        _erro = respAquarios['erro'];
+      });
+      return;
+    }
+
+    _aquarios = List<Map<String, dynamic>>.from(respAquarios['dados']);
+    _aquarioSelecionado ??= _aquarios.isNotEmpty ? _aquarios.first : null;
+
+    if (respEspecies['sucesso'] == true) {
+      _especies = List<Map<String, dynamic>>.from(respEspecies['dados']);
+    } else {
+      _erro = respEspecies['erro'];
+    }
+
+    await _carregarDadosDoAquario();
+
+    if (mounted) setState(() => _carregando = false);
   }
 
-  // ─── Análise de compatibilidade ─────────────────────────
-  Compatibilidade _analisar(Especie e, Map<String, dynamic>? aq) {
-    if (aq == null) return const Compatibilidade(NivelCompat.otimo, []);
-
-    final avisos = <String>[];
-    var incompativel = false;
-
-    final temp = (aq['temperatura'] as num?)?.toDouble() ?? 0;
-    final ph = (aq['ph'] as num?)?.toDouble() ?? 0;
-    final volume = (aq['volume_litros'] as num?)?.toDouble() ?? 0;
-
-    if (temp < e.tempMin) {
-      avisos.add('Temperatura baixa: precisa de ${_n(e.tempMin)}–${_n(e.tempMax)} °C');
-    } else if (temp > e.tempMax) {
-      avisos.add('Temperatura alta: precisa de ${_n(e.tempMin)}–${_n(e.tempMax)} °C');
+  /// Recarrega o que depende do aquário selecionado: selos e habitantes.
+  Future<void> _carregarDadosDoAquario() async {
+    if (_aquarioSelecionado == null) {
+      _compat = {};
+      _habitantes = [];
+      return;
     }
 
-    if (ph < e.phMin) {
-      avisos.add('Requer pH acima de ${_n(e.phMin)}');
-    } else if (ph > e.phMax) {
-      avisos.add('Requer pH abaixo de ${_n(e.phMax)}');
-    }
+    final id = _aquarioSelecionado!['id'].toString();
+    final respCompat = await PeixeService.compatibilidades(id);
+    final respHab = await PeixeService.habitantes(id);
+    if (!mounted) return;
 
-    if (volume < e.volumeMinimo) {
-      avisos.add('Volume insuficiente: mínimo de ${e.volumeMinimo}L');
-      incompativel = true;
+    if (respCompat['sucesso'] == true) {
+      _compat = Map<String, Map<String, dynamic>>.from(respCompat['dados']);
     }
-
-    if (e.comportamento == 'agressivo') {
-      avisos.add('Espécie agressiva — não é boa para comunitário');
-      incompativel = true;
-    } else if (e.comportamento == 'territorial') {
-      avisos.add('Territorial — evite machos da mesma espécie juntos');
+    if (respHab['sucesso'] == true) {
+      _habitantes = List<Map<String, dynamic>>.from(respHab['dados']);
     }
+  }
 
-    if (avisos.isEmpty) return const Compatibilidade(NivelCompat.otimo, []);
-    return Compatibilidade(
-      incompativel ? NivelCompat.incompativel : NivelCompat.atencao,
-      avisos,
+  Future<void> _trocarAquario(Map<String, dynamic> aq) async {
+    setState(() {
+      _aquarioSelecionado = aq;
+      _carregando = true;
+    });
+    await _carregarDadosDoAquario();
+    if (mounted) setState(() => _carregando = false);
+  }
+
+  Future<void> _buscar(String termo) async {
+    setState(() => _busca = termo);
+    final resp = await PeixeService.listarEspecies(busca: termo);
+    if (!mounted) return;
+    if (resp['sucesso'] == true) {
+      setState(() => _especies = List<Map<String, dynamic>>.from(resp['dados']));
+    }
+  }
+
+  void _aviso(String mensagem, {bool erro = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(mensagem),
+        backgroundColor: erro ? AppTheme.error : AppTheme.ctaEntrar,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
     );
   }
 
-  String _n(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
-
-  List<Especie> get _especiesFiltradas {
-    if (_busca.trim().isEmpty) return catalogoEspecies;
-    final termo = _busca.toLowerCase().trim();
-    return catalogoEspecies
-        .where((e) =>
-            e.nomeComum.toLowerCase().contains(termo) ||
-            e.nomeCientifico.toLowerCase().contains(termo))
-        .toList();
+  // ─── Auxiliares ─────────────────────────────────────────
+  String _n(dynamic v) {
+    if (v == null) return '?';
+    final d = (v as num).toDouble();
+    return d == d.roundToDouble() ? d.toStringAsFixed(0) : d.toString();
   }
+
+  Color _corEspecie(Map<String, dynamic> e) {
+    final nome = e['nome_comum']?.toString() ?? '';
+    return _paleta[nome.hashCode.abs() % _paleta.length];
+  }
+
+  String _decisaoDe(Map<String, dynamic> especie) {
+    final id = especie['id'].toString();
+    return _compat[id]?['decisao']?.toString() ?? 'liberado';
+  }
+
+  List<String> _avisosDe(Map<String, dynamic> especie) {
+    final id = especie['id'].toString();
+    final lista = _compat[id]?['avisos'];
+    return lista == null ? [] : List<String>.from(lista);
+  }
+
+  bool _jaEstaNoAquario(String especieId) =>
+      _habitantes.any((h) => h['especie_id'].toString() == especieId);
 
   void _onNavTap(int index) {
     if (index == 2) return;
@@ -250,31 +189,44 @@ class _TelaPeixesState extends State<TelaPeixes> {
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => destino));
   }
 
-  // ─── Modal de quantidade ────────────────────────────────
-  void _adicionarAoAquario(Especie e) {
-    final compat = _analisar(e, _aquarioSelecionado);
+  // ─── Adicionar espécie ──────────────────────────────────
+  void _abrirModalAdicionar(Map<String, dynamic> especie) {
+    if (_aquarioSelecionado == null) return;
 
     showDialog(
       context: context,
-      builder: (_) => _DialogQuantidade(
-        especie: e,
-        aquario: _aquarioSelecionado,
-        compatibilidade: compat,
-        onConfirmar: (qtd) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '$qtd ${e.nomeComum} adicionado(s) a ${_aquarioSelecionado?['nome'] ?? "aquário"}',
-              ),
-              backgroundColor: AppTheme.ctaEntrar,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+      builder: (_) => _DialogAdicionar(
+        especie: especie,
+        aquario: _aquarioSelecionado!,
+        cor: _corEspecie(especie),
+        onConcluido: (mensagem) async {
+          _aviso(mensagem);
+          setState(() => _carregando = true);
+          await _carregarDadosDoAquario();
+          if (mounted) setState(() => _carregando = false);
         },
       ),
     );
   }
 
+  // ─── Remover habitante ──────────────────────────────────
+  Future<void> _removerHabitante(Map<String, dynamic> h) async {
+    final resp = await PeixeService.remover(
+      aquarioId: _aquarioSelecionado!['id'].toString(),
+      itemId: h['id'].toString(),
+    );
+
+    if (resp['sucesso'] == true) {
+      _aviso('${h['nome_comum']} removido do aquário');
+      setState(() => _carregando = true);
+      await _carregarDadosDoAquario();
+      if (mounted) setState(() => _carregando = false);
+    } else {
+      _aviso(resp['erro'] ?? 'Erro ao remover', erro: true);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -286,8 +238,8 @@ class _TelaPeixesState extends State<TelaPeixes> {
             _buildBusca(),
             _buildFiltroAquarios(),
             if (_aquarioSelecionado != null) _buildParametrosAtuais(),
-            const SizedBox(height: 6),
-            Expanded(child: _buildLista()),
+            const SizedBox(height: 8),
+            Expanded(child: _buildConteudo()),
           ],
         ),
       ),
@@ -299,7 +251,6 @@ class _TelaPeixesState extends State<TelaPeixes> {
     );
   }
 
-  // ═══════════════════════════════════════════════════
   Widget _buildHeader() {
     final isDono = widget.tipoUsuario == 'dono';
     return Padding(
@@ -345,13 +296,12 @@ class _TelaPeixesState extends State<TelaPeixes> {
     );
   }
 
-  // ═══════════════════════════════════════════════════
   Widget _buildBusca() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
       child: TextField(
         controller: _buscaCtrl,
-        onChanged: (v) => setState(() => _busca = v),
+        onChanged: _buscar,
         style: const TextStyle(fontSize: 14, color: AppTheme.textDark),
         decoration: InputDecoration(
           hintText: 'Buscar peixe...',
@@ -362,7 +312,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
                   icon: const Icon(Icons.close_rounded, size: 18, color: AppTheme.hintCampo),
                   onPressed: () {
                     _buscaCtrl.clear();
-                    setState(() => _busca = '');
+                    _buscar('');
                   },
                 ),
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -371,19 +321,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
     );
   }
 
-  // ═══════════════════════════════════════════════════
   Widget _buildFiltroAquarios() {
-    if (_carregandoAquarios) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 18),
-        child: SizedBox(
-          height: 18,
-          width: 18,
-          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.ctaEntrar),
-        ),
-      );
-    }
-
     if (_aquarios.isEmpty) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
@@ -425,7 +363,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
               color: Colors.transparent,
               child: InkWell(
                 borderRadius: BorderRadius.circular(10),
-                onTap: () => setState(() => _aquarioSelecionado = aq),
+                onTap: () => _trocarAquario(aq),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
@@ -462,7 +400,6 @@ class _TelaPeixesState extends State<TelaPeixes> {
     );
   }
 
-  // ═══════════════════════════════════════════════════
   Widget _buildParametrosAtuais() {
     final aq = _aquarioSelecionado!;
     return Padding(
@@ -489,9 +426,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'pH ${_n((aq['ph'] as num).toDouble())}   ·   '
-                '${_n((aq['temperatura'] as num).toDouble())} °C   ·   '
-                '${_n((aq['volume_litros'] as num).toDouble())}L',
+                'pH ${_n(aq['ph'])}   ·   ${_n(aq['temperatura'])} °C   ·   ${_n(aq['volume_litros'])}L',
                 style: const TextStyle(fontSize: 12, color: AppTheme.tituloBemVindo),
               ),
             ),
@@ -502,54 +437,304 @@ class _TelaPeixesState extends State<TelaPeixes> {
   }
 
   // ═══════════════════════════════════════════════════
-  Widget _buildLista() {
-    final especies = _especiesFiltradas;
+  Widget _buildConteudo() {
+    if (_carregando) {
+      return const Center(child: CircularProgressIndicator(color: AppTheme.ctaEntrar));
+    }
 
-    if (especies.isEmpty) {
+    if (_erro != null) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.search_off_rounded, size: 52, color: AppTheme.hintCampo.withOpacity(0.4)),
-            const SizedBox(height: 12),
-            const Text(
-              'Nenhuma espécie encontrada',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.tituloBemVindo,
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.cloud_off_rounded, size: 52, color: AppTheme.hintCampo),
+              const SizedBox(height: 14),
+              Text(
+                _erro!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14, color: AppTheme.hintCampo),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Tente buscar por outro nome',
-              style: TextStyle(fontSize: 13, color: AppTheme.hintCampo.withOpacity(0.9)),
-            ),
-          ],
+              const SizedBox(height: 18),
+              ElevatedButton.icon(
+                onPressed: _carregarTudo,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Tentar novamente'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(0, 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 22),
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-      itemCount: especies.length,
-      itemBuilder: (_, i) => _buildCardEspecie(especies[i]),
+    return RefreshIndicator(
+      onRefresh: _carregarTudo,
+      color: AppTheme.ctaEntrar,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        children: [
+          if (_habitantes.isNotEmpty) ...[
+            _buildSecaoHabitantes(),
+            const SizedBox(height: 20),
+          ],
+          _buildTituloCatalogo(),
+          const SizedBox(height: 12),
+          if (_especies.isEmpty)
+            _buildVazioBusca()
+          else
+            ..._especies.map(_buildCardEspecie),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVazioBusca() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 40),
+      child: Column(
+        children: [
+          Icon(Icons.search_off_rounded, size: 52, color: AppTheme.hintCampo.withOpacity(0.4)),
+          const SizedBox(height: 12),
+          const Text(
+            'Nenhuma espécie encontrada',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.tituloBemVindo,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Tente buscar por outro nome',
+            style: TextStyle(fontSize: 13, color: AppTheme.hintCampo.withOpacity(0.9)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTituloCatalogo() {
+    return Row(
+      children: [
+        const Icon(Icons.menu_book_rounded, size: 17, color: AppTheme.ctaEntrar),
+        const SizedBox(width: 8),
+        const Text(
+          'Catálogo de espécies',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: AppTheme.tituloBemVindo,
+          ),
+        ),
+        const Spacer(),
+        Text(
+          '${_especies.length} espécies',
+          style: const TextStyle(fontSize: 12, color: AppTheme.hintCampo),
+        ),
+      ],
+    );
+  }
+
+  // ═══════════════════════════════════════════════════
+  // HABITANTES DO AQUÁRIO
+  // ═══════════════════════════════════════════════════
+  Widget _buildSecaoHabitantes() {
+    final totalPeixes = _habitantes.fold<int>(
+      0,
+      (soma, h) => soma + (h['quantidade'] as int? ?? 0),
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.bordaCard),
+        boxShadow: _sombraCard,
+      ),
+      child: Column(
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+              onTap: () => setState(() => _habitantesAbertos = !_habitantesAbertos),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF4FAFE),
+                  borderRadius: BorderRadius.vertical(
+                    top: const Radius.circular(15),
+                    bottom: Radius.circular(_habitantesAbertos ? 0 : 15),
+                  ),
+                  border: _habitantesAbertos
+                      ? const Border(bottom: BorderSide(color: AppTheme.bordaCard))
+                      : null,
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00A878).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: const Center(
+                        child: FaIcon(FontAwesomeIcons.fish, size: 14, color: Color(0xFF00A878)),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'No aquário',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.tituloBemVindo,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00A878).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '$totalPeixes peixes',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF00694A),
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    AnimatedRotation(
+                      turns: _habitantesAbertos ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: AppTheme.hintCampo.withOpacity(0.7),
+                        size: 22,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (_habitantesAbertos)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Column(
+                children: List.generate(_habitantes.length, (i) {
+                  final h = _habitantes[i];
+                  return Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                color: _paleta[
+                                        (h['nome_comum']?.toString() ?? '').hashCode.abs() %
+                                            _paleta.length]
+                                    .withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Center(
+                                child: FaIcon(
+                                  FontAwesomeIcons.fish,
+                                  size: 14,
+                                  color: _paleta[
+                                      (h['nome_comum']?.toString() ?? '').hashCode.abs() %
+                                          _paleta.length],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    h['nome_comum']?.toString() ?? '—',
+                                    style: const TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppTheme.tituloBemVindo,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${h['quantidade']} indivíduo${h['quantidade'] == 1 ? "" : "s"}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppTheme.hintCampo,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => _removerHabitante(h),
+                                borderRadius: BorderRadius.circular(8),
+                                child: const Padding(
+                                  padding: EdgeInsets.all(6),
+                                  child: Icon(
+                                    Icons.delete_outline_rounded,
+                                    color: AppTheme.error,
+                                    size: 19,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (i < _habitantes.length - 1)
+                        Divider(
+                          height: 1,
+                          color: AppTheme.bordaCard.withOpacity(0.7),
+                          indent: 46,
+                        ),
+                    ],
+                  );
+                }),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
   // ═══════════════════════════════════════════════════
   // CARD DA ESPÉCIE
   // ═══════════════════════════════════════════════════
-  Widget _buildCardEspecie(Especie e) {
-    final expandido = _abertos.contains(e.id);
-    final compat = _analisar(e, _aquarioSelecionado);
+  Widget _buildCardEspecie(Map<String, dynamic> e) {
+    final id = e['id'].toString();
+    final expandido = _abertos.contains(id);
+    final decisao = _decisaoDe(e);
+    final avisos = _avisosDe(e);
+    final cor = _corEspecie(e);
+    final jaTem = _jaEstaNoAquario(id);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: AppTheme.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _corBorda(compat.nivel)),
+        border: Border.all(color: _corBorda(decisao)),
         boxShadow: _sombraCard,
       ),
       child: Column(
@@ -559,7 +744,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
             child: InkWell(
               borderRadius: BorderRadius.circular(15),
               onTap: () => setState(() {
-                expandido ? _abertos.remove(e.id) : _abertos.add(e.id);
+                expandido ? _abertos.remove(id) : _abertos.add(id);
               }),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -569,11 +754,11 @@ class _TelaPeixesState extends State<TelaPeixes> {
                       width: 42,
                       height: 42,
                       decoration: BoxDecoration(
-                        color: e.cor.withOpacity(0.12),
+                        color: cor.withOpacity(0.12),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Center(
-                        child: FaIcon(FontAwesomeIcons.fish, size: 18, color: e.cor),
+                        child: FaIcon(FontAwesomeIcons.fish, size: 18, color: cor),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -581,17 +766,31 @@ class _TelaPeixesState extends State<TelaPeixes> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            e.nomeComum,
-                            style: const TextStyle(
-                              fontSize: 15.5,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.tituloBemVindo,
-                            ),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  e['nome_comum']?.toString() ?? '—',
+                                  style: const TextStyle(
+                                    fontSize: 15.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppTheme.tituloBemVindo,
+                                  ),
+                                ),
+                              ),
+                              if (jaTem) ...[
+                                const SizedBox(width: 6),
+                                const Icon(
+                                  Icons.check_circle_rounded,
+                                  size: 15,
+                                  color: Color(0xFF00A878),
+                                ),
+                              ],
+                            ],
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            e.nomeCientifico,
+                            e['nome_cientifico']?.toString() ?? '',
                             style: TextStyle(
                               fontSize: 12,
                               fontStyle: FontStyle.italic,
@@ -601,7 +800,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
                         ],
                       ),
                     ),
-                    if (_aquarioSelecionado != null) _selo(compat.nivel),
+                    if (_aquarioSelecionado != null) _selo(decisao),
                     const SizedBox(width: 6),
                     AnimatedRotation(
                       turns: expandido ? 0.5 : 0,
@@ -625,7 +824,6 @@ class _TelaPeixesState extends State<TelaPeixes> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Faixa ilustrativa da espécie
                   Container(
                     height: 96,
                     width: double.infinity,
@@ -633,10 +831,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: [
-                          e.cor.withOpacity(0.16),
-                          e.cor.withOpacity(0.05),
-                        ],
+                        colors: [cor.withOpacity(0.16), cor.withOpacity(0.05)],
                       ),
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -644,20 +839,19 @@ class _TelaPeixesState extends State<TelaPeixes> {
                       child: FaIcon(
                         FontAwesomeIcons.fish,
                         size: 42,
-                        color: e.cor.withOpacity(0.55),
+                        color: cor.withOpacity(0.55),
                       ),
                     ),
                   ),
                   const SizedBox(height: 14),
 
-                  // Requisitos em grade
                   Row(
                     children: [
                       Expanded(
                         child: _requisito(
                           Icons.thermostat_rounded,
                           'Temperatura',
-                          '${_n(e.tempMin)}–${_n(e.tempMax)} °C',
+                          '${_n(e['temp_min'])}–${_n(e['temp_max'])} °C',
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -665,7 +859,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
                         child: _requisito(
                           Icons.science_outlined,
                           'pH',
-                          '${_n(e.phMin)} – ${_n(e.phMax)}',
+                          '${_n(e['ph_min'])} – ${_n(e['ph_max'])}',
                         ),
                       ),
                     ],
@@ -677,49 +871,85 @@ class _TelaPeixesState extends State<TelaPeixes> {
                         child: _requisito(
                           Icons.water_drop_rounded,
                           'Volume mínimo',
-                          '${e.volumeMinimo}L',
+                          '${e['volume_minimo_l'] ?? "?"}L',
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: _requisito(
-                          Icons.groups_rounded,
-                          _rotuloComportamento(e.comportamento),
-                          _rotuloAgrupamento(e),
+                          Icons.straighten_rounded,
+                          'Tamanho adulto',
+                          '${_n(e['tamanho_adulto_cm'])} cm',
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 10),
-                  _requisito(
-                    Icons.restaurant_rounded,
-                    'Alimentação',
-                    e.alimentacao,
-                    largura: true,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _requisito(
+                          Icons.groups_rounded,
+                          _rotuloComportamento(e['comportamento']?.toString()),
+                          _rotuloAgrupamento(e),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _requisito(
+                          Icons.restaurant_rounded,
+                          'Alimentação',
+                          _capitalizar(e['alimentacao']?.toString()),
+                        ),
+                      ),
+                    ],
                   ),
 
-                  // Avisos de compatibilidade
-                  if (_aquarioSelecionado != null && compat.avisos.isNotEmpty) ...[
-                    const SizedBox(height: 14),
-                    ...compat.avisos.map((a) => _aviso(a, compat.nivel)),
-                  ],
-
-                  if (_aquarioSelecionado != null && compat.avisos.isEmpty) ...[
-                    const SizedBox(height: 14),
-                    _aviso(
-                      'Compatível com ${_aquarioSelecionado!['nome']}',
-                      NivelCompat.otimo,
+                  if (e['observacoes'] != null &&
+                      e['observacoes'].toString().isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.backgroundApp,
+                        borderRadius: BorderRadius.circular(11),
+                        border: Border.all(color: AppTheme.bordaCard),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.info_outline_rounded,
+                              size: 15, color: AppTheme.ctaEntrar),
+                          const SizedBox(width: 9),
+                          Expanded(
+                            child: Text(
+                              e['observacoes'].toString(),
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                height: 1.4,
+                                color: Colors.black.withOpacity(0.62),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
 
+                  if (_aquarioSelecionado != null) ...[
+                    const SizedBox(height: 14),
+                    if (avisos.isEmpty)
+                      _avisoBox(
+                        'Compatível com ${_aquarioSelecionado!['nome']}',
+                        'liberado',
+                      )
+                    else
+                      ...avisos.map((a) => _avisoBox(a, decisao)),
+                  ],
+
                   const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: _aquarioSelecionado == null
-                        ? null
-                        : () => _adicionarAoAquario(e),
-                    icon: const Icon(Icons.add_rounded, size: 19),
-                    label: const Text('Adicionar Peixe no Aquário'),
-                  ),
+                  _botaoAdicionar(e, decisao, jaTem),
                 ],
               ),
             ),
@@ -729,32 +959,77 @@ class _TelaPeixesState extends State<TelaPeixes> {
     );
   }
 
-  // ─── Auxiliares visuais ─────────────────────────────────
-  Color _corBorda(NivelCompat n) => switch (n) {
-        NivelCompat.otimo => AppTheme.bordaCard,
-        NivelCompat.atencao => const Color(0xFFFCE4B0),
-        NivelCompat.incompativel => const Color(0xFFF5C6C6),
+  Widget _botaoAdicionar(Map<String, dynamic> e, String decisao, bool jaTem) {
+    if (_aquarioSelecionado == null) {
+      return const SizedBox.shrink();
+    }
+
+    if (jaTem) {
+      return OutlinedButton.icon(
+        onPressed: null,
+        icon: const Icon(Icons.check_rounded, size: 18),
+        label: const Text('Já está no aquário'),
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(double.infinity, 52),
+          side: BorderSide(color: AppTheme.bordaCard),
+          foregroundColor: AppTheme.hintCampo,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+
+    if (decisao == 'bloqueado') {
+      return Column(
+        children: [
+          OutlinedButton.icon(
+            onPressed: null,
+            icon: const Icon(Icons.block_rounded, size: 18),
+            label: const Text('Incompatível com este aquário'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 52),
+              side: const BorderSide(color: Color(0xFFF5C6C6)),
+              foregroundColor: AppTheme.error,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return ElevatedButton.icon(
+      onPressed: () => _abrirModalAdicionar(e),
+      icon: const Icon(Icons.add_rounded, size: 19),
+      label: const Text('Adicionar Peixe no Aquário'),
+    );
+  }
+
+  // ─── Componentes visuais ────────────────────────────────
+  Color _corBorda(String decisao) => switch (decisao) {
+        'bloqueado' => const Color(0xFFF5C6C6),
+        'requer_confirmacao' => const Color(0xFFFCE4B0),
+        _ => AppTheme.bordaCard,
       };
 
-  Widget _selo(NivelCompat n) {
-    final (cor, fundo, icone, texto) = switch (n) {
-      NivelCompat.otimo => (
-          const Color(0xFF00875A),
-          const Color(0xFFE7F8EF),
-          Icons.check_circle_rounded,
-          'Ideal',
+  Widget _selo(String decisao) {
+    final (cor, fundo, icone, texto) = switch (decisao) {
+      'bloqueado' => (
+          AppTheme.error,
+          const Color(0xFFFDECEC),
+          Icons.cancel_rounded,
+          'Evitar',
         ),
-      NivelCompat.atencao => (
+      'requer_confirmacao' => (
           const Color(0xFFD97706),
           const Color(0xFFFFF9EC),
           Icons.warning_amber_rounded,
           'Atenção',
         ),
-      NivelCompat.incompativel => (
-          AppTheme.error,
-          const Color(0xFFFDECEC),
-          Icons.cancel_rounded,
-          'Evitar',
+      _ => (
+          const Color(0xFF00875A),
+          const Color(0xFFE7F8EF),
+          Icons.check_circle_rounded,
+          'Ideal',
         ),
     };
 
@@ -779,9 +1054,8 @@ class _TelaPeixesState extends State<TelaPeixes> {
     );
   }
 
-  Widget _requisito(IconData icon, String label, String valor, {bool largura = false}) {
+  Widget _requisito(IconData icon, String label, String valor) {
     return Container(
-      width: largura ? double.infinity : null,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: AppTheme.backgroundApp,
@@ -814,25 +1088,25 @@ class _TelaPeixesState extends State<TelaPeixes> {
     );
   }
 
-  Widget _aviso(String texto, NivelCompat nivel) {
-    final (cor, fundo, borda, icone) = switch (nivel) {
-      NivelCompat.otimo => (
-          const Color(0xFF00694A),
-          const Color(0xFFE7F8EF),
-          const Color(0xFF9BDDBB),
-          Icons.check_circle_rounded,
+  Widget _avisoBox(String texto, String decisao) {
+    final (cor, fundo, borda, icone) = switch (decisao) {
+      'bloqueado' => (
+          const Color(0xFF9B1C1C),
+          const Color(0xFFFDECEC),
+          const Color(0xFFF5C6C6),
+          Icons.cancel_rounded,
         ),
-      NivelCompat.atencao => (
+      'requer_confirmacao' => (
           const Color(0xFF92400E),
           const Color(0xFFFFF9EC),
           const Color(0xFFFCE4B0),
           Icons.warning_amber_rounded,
         ),
-      NivelCompat.incompativel => (
-          const Color(0xFF9B1C1C),
-          const Color(0xFFFDECEC),
-          const Color(0xFFF5C6C6),
-          Icons.cancel_rounded,
+      _ => (
+          const Color(0xFF00694A),
+          const Color(0xFFE7F8EF),
+          const Color(0xFF9BDDBB),
+          Icons.check_circle_rounded,
         ),
     };
 
@@ -846,6 +1120,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
         border: Border.all(color: borda),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icone, size: 16, color: cor),
           const SizedBox(width: 9),
@@ -865,208 +1140,364 @@ class _TelaPeixesState extends State<TelaPeixes> {
     );
   }
 
-  String _rotuloComportamento(String c) => switch (c) {
+  String _rotuloComportamento(String? c) => switch (c) {
         'pacifico' => 'Pacífico',
+        'semi_agressivo' => 'Semi-agressivo',
         'territorial' => 'Territorial',
-        _ => 'Agressivo',
+        'agressivo' => 'Agressivo',
+        _ => 'Comportamento',
       };
 
-  String _rotuloAgrupamento(Especie e) => switch (e.agrupamento) {
-        'cardume' => 'Cardume de ${e.cardumeMinimo ?? 6}+',
+  String _rotuloAgrupamento(Map<String, dynamic> e) => switch (e['agrupamento']) {
+        'cardume' => 'Cardume de ${e['cardume_minimo'] ?? 6}+',
         'par' => 'Viver em par',
-        _ => 'Solitário',
+        'harem' => 'Harém',
+        'solitario' => 'Solitário',
+        _ => '—',
       };
+
+  String _capitalizar(String? texto) {
+    if (texto == null || texto.isEmpty) return '—';
+    return texto[0].toUpperCase() + texto.substring(1);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
-// MODAL DE QUANTIDADE
+// MODAL DE ADIÇÃO — analisa em tempo real e trata as 3 decisões
 // ═══════════════════════════════════════════════════════════
-class _DialogQuantidade extends StatefulWidget {
-  final Especie especie;
-  final Map<String, dynamic>? aquario;
-  final Compatibilidade compatibilidade;
-  final Function(int) onConfirmar;
+class _DialogAdicionar extends StatefulWidget {
+  final Map<String, dynamic> especie;
+  final Map<String, dynamic> aquario;
+  final Color cor;
+  final Function(String) onConcluido;
 
-  const _DialogQuantidade({
+  const _DialogAdicionar({
     required this.especie,
     required this.aquario,
-    required this.compatibilidade,
-    required this.onConfirmar,
+    required this.cor,
+    required this.onConcluido,
   });
 
   @override
-  State<_DialogQuantidade> createState() => _DialogQuantidadeState();
+  State<_DialogAdicionar> createState() => _DialogAdicionarState();
 }
 
-class _DialogQuantidadeState extends State<_DialogQuantidade> {
+class _DialogAdicionarState extends State<_DialogAdicionar> {
   late int _quantidade;
+  Map<String, dynamic>? _analise;
+  bool _analisando = true;
+  bool _salvando = false;
+  int _requisicao = 0;
 
   @override
   void initState() {
     super.initState();
-    // Sugere o cardume mínimo quando a espécie precisa viver em grupo
-    _quantidade = widget.especie.cardumeMinimo ?? 1;
+    // Já sugere o cardume mínimo quando a espécie precisa de grupo
+    _quantidade = (widget.especie['cardume_minimo'] as int?) ?? 1;
+    _analisar();
+  }
+
+  Future<void> _analisar() async {
+    final minhaRequisicao = ++_requisicao;
+    setState(() => _analisando = true);
+
+    final resp = await PeixeService.analisar(
+      especieId: widget.especie['id'].toString(),
+      aquarioId: widget.aquario['id'].toString(),
+      quantidade: _quantidade,
+    );
+
+    // Descarta respostas antigas se o usuário mudou a quantidade rápido
+    if (!mounted || minhaRequisicao != _requisicao) return;
+
+    setState(() {
+      _analisando = false;
+      _analise = resp['sucesso'] == true ? resp['dados'] : null;
+    });
+  }
+
+  void _mudarQuantidade(int novo) {
+    if (novo < 1) return;
+    setState(() => _quantidade = novo);
+    _analisar();
+  }
+
+  Future<void> _confirmar() async {
+    final decisao = _analise?['decisao']?.toString() ?? 'liberado';
+    if (decisao == 'bloqueado') return;
+
+    setState(() => _salvando = true);
+
+    final resp = await PeixeService.adicionar(
+      aquarioId: widget.aquario['id'].toString(),
+      especieId: widget.especie['id'].toString(),
+      quantidade: _quantidade,
+      confirmar: decisao == 'requer_confirmacao',
+    );
+
+    if (!mounted) return;
+    setState(() => _salvando = false);
+
+    if (resp['sucesso'] == true) {
+      Navigator.pop(context);
+      widget.onConcluido(
+        '$_quantidade ${widget.especie['nome_comum']} adicionado(s) a ${widget.aquario['nome']}',
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(resp['erro']?.toString() ?? 'Erro ao adicionar'),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final e = widget.especie;
-    final precisaCardume = e.agrupamento == 'cardume' && e.cardumeMinimo != null;
-    final abaixoDoIdeal = precisaCardume && _quantidade < e.cardumeMinimo!;
+    final decisao = _analise?['decisao']?.toString() ?? 'liberado';
+    final avisos = _analise == null
+        ? <String>[]
+        : List<Map<String, dynamic>>.from(_analise!['avisos'] ?? [])
+            .map((a) => a['mensagem'].toString())
+            .toList();
 
     return Dialog(
       backgroundColor: AppTheme.white,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: e.cor.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(11),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ─── Cabeçalho ────────────────────────────
+              Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: widget.cor.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: Center(
+                      child: FaIcon(FontAwesomeIcons.fish, size: 16, color: widget.cor),
+                    ),
                   ),
-                  child: Center(
-                    child: FaIcon(FontAwesomeIcons.fish, size: 16, color: e.cor),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          e['nome_comum']?.toString() ?? '—',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.tituloBemVindo,
+                          ),
+                        ),
+                        Text(
+                          'em ${widget.aquario['nome']}',
+                          style: const TextStyle(fontSize: 12, color: AppTheme.hintCampo),
+                        ),
+                      ],
+                    ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // ─── Contador ─────────────────────────────
+              const Text(
+                'Quantidade de peixes',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.labelCampo,
                 ),
-                const SizedBox(width: 11),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        e.nomeComum,
+              ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _botaoContador(
+                    Icons.remove_rounded,
+                    _quantidade > 1 ? () => _mudarQuantidade(_quantidade - 1) : null,
+                  ),
+                  Container(
+                    width: 86,
+                    height: 52,
+                    margin: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(
+                      color: AppTheme.backgroundApp,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.bordaCampo),
+                    ),
+                    child: Center(
+                      child: Text(
+                        '$_quantidade',
                         style: const TextStyle(
-                          fontSize: 16,
+                          fontSize: 24,
                           fontWeight: FontWeight.w800,
                           color: AppTheme.tituloBemVindo,
                         ),
                       ),
-                      Text(
-                        'em ${widget.aquario?['nome'] ?? "—"}',
-                        style: const TextStyle(fontSize: 12, color: AppTheme.hintCampo),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            const Text(
-              'Quantidade de peixes',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.labelCampo,
+                  _botaoContador(
+                    Icons.add_rounded,
+                    () => _mudarQuantidade(_quantidade + 1),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 10),
+              const SizedBox(height: 18),
 
-            // Contador
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _botaoContador(
-                  Icons.remove_rounded,
-                  _quantidade > 1 ? () => setState(() => _quantidade--) : null,
-                ),
-                Container(
-                  width: 86,
-                  height: 52,
-                  margin: const EdgeInsets.symmetric(horizontal: 14),
-                  decoration: BoxDecoration(
-                    color: AppTheme.backgroundApp,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.bordaCampo),
-                  ),
+              // ─── Resultado da análise ─────────────────
+              if (_analisando)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
                   child: Center(
-                    child: Text(
-                      '$_quantidade',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.tituloBemVindo,
+                    child: SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.ctaEntrar,
                       ),
                     ),
                   ),
-                ),
-                _botaoContador(
-                  Icons.add_rounded,
-                  () => setState(() => _quantidade++),
-                ),
+                )
+              else ...[
+                if (avisos.isEmpty)
+                  _caixa(
+                    'Tudo certo para adicionar',
+                    'liberado',
+                    Icons.check_circle_rounded,
+                  )
+                else
+                  ...avisos.map(
+                    (a) => _caixa(
+                      a,
+                      decisao,
+                      decisao == 'bloqueado'
+                          ? Icons.cancel_rounded
+                          : Icons.warning_amber_rounded,
+                    ),
+                  ),
               ],
-            ),
+              const SizedBox(height: 16),
 
-            if (precisaCardume) ...[
-              const SizedBox(height: 14),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: abaixoDoIdeal ? const Color(0xFFFFF9EC) : const Color(0xFFE7F8EF),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: abaixoDoIdeal ? const Color(0xFFFCE4B0) : const Color(0xFF9BDDBB),
+              // ─── Ações ────────────────────────────────
+              if (decisao == 'bloqueado')
+                OutlinedButton.icon(
+                  onPressed: null,
+                  icon: const Icon(Icons.block_rounded, size: 18),
+                  label: const Text('Não é possível adicionar'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 52),
+                    side: const BorderSide(color: Color(0xFFF5C6C6)),
+                    foregroundColor: AppTheme.error,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      abaixoDoIdeal ? Icons.warning_amber_rounded : Icons.check_circle_rounded,
-                      size: 16,
-                      color: abaixoDoIdeal ? const Color(0xFFD97706) : const Color(0xFF00875A),
-                    ),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: Text(
-                        abaixoDoIdeal
-                            ? 'Esta espécie vive melhor em cardume de ${e.cardumeMinimo}+ indivíduos'
-                            : 'Quantidade adequada para cardume',
-                        style: TextStyle(
-                          fontSize: 12,
-                          height: 1.3,
-                          color: abaixoDoIdeal
-                              ? const Color(0xFF92400E)
-                              : const Color(0xFF00694A),
+                )
+              else
+                ElevatedButton(
+                  onPressed: (_salvando || _analisando) ? null : _confirmar,
+                  style: decisao == 'requer_confirmacao'
+                      ? ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFD97706),
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 52),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        )
+                      : null,
+                  child: _salvando
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Text(
+                          decisao == 'requer_confirmacao'
+                              ? 'Adicionar mesmo assim'
+                              : 'Adicionar',
                         ),
-                      ),
-                    ),
-                  ],
                 ),
+              const SizedBox(height: 10),
+              OutlinedButton(
+                onPressed: _salvando ? null : () => Navigator.pop(context),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 52),
+                  side: const BorderSide(color: AppTheme.error),
+                  foregroundColor: AppTheme.error,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+                child: const Text('Cancelar'),
               ),
             ],
-
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                widget.onConfirmar(_quantidade);
-              },
-              child: const Text('Adicionar'),
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton(
-              onPressed: () => Navigator.pop(context),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 52),
-                side: const BorderSide(color: AppTheme.error),
-                foregroundColor: AppTheme.error,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-              ),
-              child: const Text('Cancelar'),
-            ),
-          ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _caixa(String texto, String decisao, IconData icone) {
+    final (cor, fundo, borda) = switch (decisao) {
+      'bloqueado' => (
+          const Color(0xFF9B1C1C),
+          const Color(0xFFFDECEC),
+          const Color(0xFFF5C6C6),
+        ),
+      'requer_confirmacao' => (
+          const Color(0xFF92400E),
+          const Color(0xFFFFF9EC),
+          const Color(0xFFFCE4B0),
+        ),
+      _ => (
+          const Color(0xFF00694A),
+          const Color(0xFFE7F8EF),
+          const Color(0xFF9BDDBB),
+        ),
+    };
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: fundo,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borda),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icone, size: 16, color: cor),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              texto,
+              style: TextStyle(
+                fontSize: 12.5,
+                color: cor,
+                fontWeight: FontWeight.w600,
+                height: 1.3,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

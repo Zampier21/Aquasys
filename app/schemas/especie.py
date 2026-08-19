@@ -5,9 +5,13 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 
+# ═══════════════════════════════════════════════════════
+# CATÁLOGO DE ESPÉCIES
+# ═══════════════════════════════════════════════════════
 class EspecieBase(BaseModel):
     nome_comum: str = Field(..., min_length=1, max_length=100)
     nome_cientifico: Optional[str] = None
+    nomes_alternativos: Optional[str] = None
     familia: Optional[str] = None
     tipo_agua: Optional[str] = None
     origem: Optional[str] = None
@@ -95,3 +99,34 @@ class SimulacaoRequest(BaseModel):
     especie_id: UUID
     aquario_id: UUID
     quantidade: int = Field(default=1, gt=0)
+
+
+# ═══════════════════════════════════════════════════════
+# POVOAMENTO — espécies dentro de cada aquário
+# ═══════════════════════════════════════════════════════
+class PovoamentoCreate(BaseModel):
+    """Corpo do POST que adiciona uma espécie ao aquário."""
+
+    especie_id: UUID
+    quantidade: int = Field(default=1, gt=0)
+
+
+class PovoamentoUpdate(BaseModel):
+    """Ajuste de quantidade de uma espécie já presente."""
+
+    quantidade: int = Field(..., gt=0)
+
+
+class HabitanteResponse(BaseModel):
+    """Uma espécie que vive no aquário, com dados úteis para a tela."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID                 # id da linha em aquario_especie
+    especie_id: UUID
+    nome_comum: str
+    nome_cientifico: Optional[str] = None
+    quantidade: int
+    tamanho_adulto_cm: Optional[float] = None
+    comportamento: Optional[str] = None
+    adicionado_em: datetime
