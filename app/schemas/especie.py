@@ -1,9 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
-
 from pydantic import BaseModel, ConfigDict, Field
-
 
 # ═══════════════════════════════════════════════════════
 # CATÁLOGO DE ESPÉCIES
@@ -48,11 +46,8 @@ class EspecieBase(BaseModel):
 
 class EspecieCreate(EspecieBase):
     pass
-
-
 class EspecieResponse(EspecieBase):
     model_config = ConfigDict(from_attributes=True)
-
     id: UUID
     ativo: bool
     criado_em: datetime
@@ -68,14 +63,6 @@ class AvisoCompat(BaseModel):
 
 
 class AnaliseResponse(BaseModel):
-    """
-    decisao assume três valores:
-
-      liberado             tudo dentro do ideal
-      requer_confirmacao   ressalvas corrigíveis (pH, temperatura, cardume)
-      bloqueado            impedimento sem solução
-    """
-
     nivel: str
     decisao: str
     pode_adicionar: bool
