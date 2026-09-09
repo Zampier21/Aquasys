@@ -2,7 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routers import auth, aquarios, peixes, clientes, fichas, cursos
+from app.routers import (
+    auth, aquarios, peixes, clientes, fichas, cursos, painel, perfil,
+)
 
 # ─── Criação da aplicação ─────────────────────────────
 app = FastAPI(
@@ -23,6 +25,8 @@ app.add_middleware(
 
 # ─── Registro dos routers ─────────────────────────────
 app.include_router(auth.router,      prefix="/auth",      tags=["Autenticação"])
+app.include_router(perfil.router,    prefix="/perfil",    tags=["Perfil"])
+app.include_router(painel.router,    prefix="/painel",    tags=["Painel"])
 app.include_router(aquarios.router,  prefix="/aquarios",  tags=["Aquários"])
 app.include_router(peixes.router,    prefix="/peixes",    tags=["Peixes"])
 app.include_router(clientes.router,  prefix="/clientes",  tags=["Clientes"])

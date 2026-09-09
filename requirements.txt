@@ -1,0 +1,30 @@
+# Dependências diretas do AquaSys — instale com:
+#   pip install -r requirements.txt
+
+# API
+fastapi==0.141.1
+uvicorn==0.52.1
+
+# Banco de dados
+SQLAlchemy==2.0.52
+psycopg2-binary==2.9.12
+alembic==1.19.1
+
+# Configuração
+pydantic==2.13.4
+pydantic-settings==2.15.0
+python-dotenv==1.2.2
+
+# Autenticação
+python-jose==3.5.0
+passlib==1.7.4
+bcrypt==4.0.1
+
+# Imagens do catálogo de espécies
+# Pillow redimensiona a foto antes de gravar; httpx busca no Wikimedia
+# Commons (e também é usado nos testes).
+Pillow==12.3.0
+httpx==0.28.1
+
+# Testes
+pytest==9.1.1

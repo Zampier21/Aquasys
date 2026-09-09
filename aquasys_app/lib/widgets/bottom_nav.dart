@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../Tema/app_tema.dart';
 
+/// Barra inferior do Figma: ícone + rótulo e, no item ativo,
+/// um traço horizontal logo abaixo do rótulo.
 class BottomNav extends StatelessWidget {
   final int currentIndex;
   final Function(int) onTap;
@@ -16,6 +18,35 @@ class BottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final itens = <_ItemNav>[
+      const _ItemNav(
+        rotulo: 'Início',
+        icone: Icon(Icons.home_outlined, size: 24),
+        iconeAtivo: Icon(Icons.home_rounded, size: 24),
+      ),
+      const _ItemNav(
+        rotulo: 'Aquários',
+        icone: Icon(Icons.water_drop_outlined, size: 23),
+        iconeAtivo: Icon(Icons.water_drop_rounded, size: 23),
+      ),
+      const _ItemNav(
+        rotulo: 'Peixes',
+        icone: FaIcon(FontAwesomeIcons.fish, size: 19),
+        iconeAtivo: FaIcon(FontAwesomeIcons.fish, size: 19),
+      ),
+      _ItemNav(
+        rotulo: isDono ? 'Clientes' : 'Cursos',
+        icone: Icon(
+          isDono ? Icons.groups_outlined : Icons.school_outlined,
+          size: 24,
+        ),
+        iconeAtivo: Icon(
+          isDono ? Icons.groups_rounded : Icons.school_rounded,
+          size: 24,
+        ),
+      ),
+    ];
+
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.white,
@@ -24,67 +55,71 @@ class BottomNav extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF023E8A).withOpacity(0.06),
+            color: AppTheme.azulEscuro.withValues(alpha: 0.06),
             blurRadius: 20,
             offset: const Offset(0, -6),
           ),
         ],
       ),
-      child: BottomNavigationBar(
-        currentIndex: currentIndex,
-        onTap: onTap,
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: AppTheme.white,
-        selectedItemColor: AppTheme.ctaEntrar,
-        unselectedItemColor: AppTheme.hintCampo,
-        selectedLabelStyle: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 62,
+          child: Row(
+            children: List.generate(itens.length, (i) {
+              final ativo = i == currentIndex;
+              final cor = ativo ? AppTheme.primaria : AppTheme.textoFraco;
+
+              return Expanded(
+                child: InkWell(
+                  onTap: () => onTap(i),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconTheme(
+                        data: IconThemeData(color: cor),
+                        child: ativo ? itens[i].iconeAtivo : itens[i].icone,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        itens[i].rotulo,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: cor,
+                          fontWeight:
+                              ativo ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      // Traço do item ativo
+                      Container(
+                        height: 2,
+                        width: 34,
+                        decoration: BoxDecoration(
+                          color: ativo ? AppTheme.primaria : Colors.transparent,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ),
         ),
-        unselectedLabelStyle: const TextStyle(fontSize: 11),
-        elevation: 0,
-        items: [
-          // ─── Início ─────────────────────────────────
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined, size: 24),
-            activeIcon: Icon(Icons.home_rounded, size: 24),
-            label: 'Início',
-          ),
-
-          // ─── Aquários — gota d'água, igual aos cards ─
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.water_drop_outlined, size: 23),
-            activeIcon: Icon(Icons.water_drop_rounded, size: 23),
-            label: 'Aquários',
-          ),
-
-          // ─── Peixes — mesmo peixe dos cards ─────────
-          const BottomNavigationBarItem(
-            icon: Padding(
-              padding: EdgeInsets.only(top: 2, bottom: 2),
-              child: FaIcon(FontAwesomeIcons.fish, size: 19),
-            ),
-            activeIcon: Padding(
-              padding: EdgeInsets.only(top: 2, bottom: 2),
-              child: FaIcon(FontAwesomeIcons.fish, size: 19),
-            ),
-            label: 'Peixes',
-          ),
-
-          // ─── Clientes / Cursos ──────────────────────
-          BottomNavigationBarItem(
-            icon: Icon(
-              isDono ? Icons.groups_outlined : Icons.school_outlined,
-              size: 24,
-            ),
-            activeIcon: Icon(
-              isDono ? Icons.groups_rounded : Icons.school_rounded,
-              size: 24,
-            ),
-            label: isDono ? 'Clientes' : 'Cursos',
-          ),
-        ],
       ),
     );
   }
+}
+
+class _ItemNav {
+  final String rotulo;
+  final Widget icone;
+  final Widget iconeAtivo;
+
+  const _ItemNav({
+    required this.rotulo,
+    required this.icone,
+    required this.iconeAtivo,
+  });
 }

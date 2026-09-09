@@ -66,5 +66,12 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- Exigido pelo image_picker: sem estas justificativas o iOS
+	     encerra o app ao abrir a galeria ou a câmera. Só são usadas
+	     na tela de Configurações, para a foto de perfil / logo. -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>O AquaSys usa suas fotos para você escolher a imagem de perfil ou a logo da sua loja.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>O AquaSys usa a câmera para você tirar a foto de perfil ou a logo da sua loja.</string>
 </dict>
 </plist>

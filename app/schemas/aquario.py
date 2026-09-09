@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -12,7 +12,6 @@ class AquarioCreate(BaseModel):
     temperatura: float
     ph: float = Field(..., ge=0, le=14)
     tipo: Optional[str] = None
-    grupo_id: Optional[UUID] = None
 
     # Parâmetros químicos — opcionais no cadastro
     amonia_ppm: float = Field(default=0, ge=0)
@@ -27,7 +26,6 @@ class AquarioUpdate(BaseModel):
     temperatura: Optional[float] = None
     ph: Optional[float] = Field(default=None, ge=0, le=14)
     tipo: Optional[str] = None
-    grupo_id: Optional[UUID] = None
 
     amonia_ppm: Optional[float] = Field(default=None, ge=0)
     nitrito_ppm: Optional[float] = Field(default=None, ge=0)
@@ -44,7 +42,6 @@ class AquarioResponse(BaseModel):
     temperatura: float
     ph: float
     tipo: Optional[str] = None
-    grupo_id: Optional[UUID] = None
 
     # Vêm da última medição em parametros_agua
     amonia_ppm: float = 0
@@ -52,8 +49,23 @@ class AquarioResponse(BaseModel):
     nitrato_ppm: float = 0
     medido_em: Optional[datetime] = None
 
-    # Vem do último registro em historico_aquario
-    ultima_manutencao: Optional[datetime] = None
+    # Parâmetros fora da faixa, avaliados pelo servidor conforme o TIPO
+    # do aquário. O app só pinta o que vem aqui — a regra vive num lugar só.
+    problemas: List[str] = Field(default_factory=list)
+
+    # chave -> faixa ideal em texto ("24 °C – 28 °C"), para a tela de ajuda
+    # mostrar o intervalo certo para este aquário. Quando há peixes
+    # cadastrados, a faixa de pH e temperatura é a que eles aguentam, não
+    # a do tipo: comunitário de peixes alcalinos não leva alarme à toa.
+    faixas: Dict[str, str] = Field(default_factory=dict)
+
+    # chave -> frase explicando a situação daquele parâmetro, citando o
+    # peixe responsável quando o valor não serve para ele.
+    explicacoes: Dict[str, str] = Field(default_factory=dict)
+
+    # Como ler a escala de pH. Vale para qualquer aquário, mas viaja aqui
+    # para o app não ter texto de conteúdo escrito dentro dele.
+    escala_ph: str = ""
 
     criado_em: datetime
 

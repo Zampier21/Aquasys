@@ -2,14 +2,17 @@ import unicodedata
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_usuario_atual
 from app.database import get_db
+from app.routers.aquarios import regerar_alertas
 from app.models.aquario import Aquario
-from app.models.especie import AquarioEspecie, CompatibEspecie, Especie
+from app.models.especie import (
+    AquarioEspecie, CompatibEspecie, Especie, EspecieImagem,
+)
 from app.models.usuario import Usuario
 from app.schemas.especie import (
     AnaliseResponse, CompatividadeResumo, EspecieCreate, EspecieResponse,
@@ -66,6 +69,69 @@ def _filtro_busca(query, termo_bruto: str):
 # ═══════════════════════════════════════════════════════
 # HELPERS
 # ═══════════════════════════════════════════════════════
+# Um mês de cache no aparelho. A foto de uma espécie não muda; quando
+# muda, o script troca o hash e a URL do ETag deixa de bater.
+_CACHE_DA_IMAGEM = "public, max-age=2592000"
+
+
+def _creditos_das_imagens(db: Session, ids=None) -> dict:
+    """
+    {especie_id: (autor, licenca)} das espécies que têm foto.
+
+    Consulta só as colunas de texto — de jeito nenhum os bytes. É o que
+    permite dizer ao app quais peixes têm foto sem carregar foto alguma.
+    """
+    consulta = db.query(
+        EspecieImagem.especie_id, EspecieImagem.autor, EspecieImagem.licenca
+    )
+    if ids is not None:
+        if not ids:
+            return {}
+        consulta = consulta.filter(EspecieImagem.especie_id.in_(ids))
+
+    return {
+        especie_id: (autor, licenca)
+        for especie_id, autor, licenca in consulta.all()
+    }
+
+
+def _tem_imagem(especie_id, db: Session) -> bool:
+    return (
+        db.query(EspecieImagem.especie_id)
+        .filter(EspecieImagem.especie_id == especie_id)
+        .first()
+        is not None
+    )
+
+
+def _credito_em_texto(autor, licenca):
+    if not autor and not licenca:
+        return None
+    if not autor:
+        return licenca
+    if not licenca:
+        return autor
+    return f"{autor} ({licenca})"
+
+
+def _url_imagem(especie_id, miniatura: bool = False) -> str:
+    sufixo = "?tamanho=miniatura" if miniatura else ""
+    return f"/peixes/{especie_id}/imagem{sufixo}"
+
+
+def _montar_especie(especie: Especie, creditos: dict) -> EspecieResponse:
+    """Espécie do catálogo, com os caminhos da foto quando ela existe."""
+    resposta = EspecieResponse.model_validate(especie)
+
+    credito = creditos.get(especie.id)
+    if credito is not None:
+        resposta.imagem = _url_imagem(especie.id)
+        resposta.imagem_miniatura = _url_imagem(especie.id, miniatura=True)
+        resposta.imagem_credito = _credito_em_texto(*credito)
+
+    return resposta
+
+
 def _carregar_excecoes(db: Session) -> dict:
     """Indexa as exceções curadas por par ordenado de IDs."""
     excecoes = {}
@@ -116,7 +182,22 @@ def _habitantes(aquario_id: UUID, db: Session, ignorar: Optional[UUID] = None):
     return [(especie, item.quantidade) for item, especie in query.all()]
 
 
-def _montar_habitante(item: AquarioEspecie, especie: Especie) -> HabitanteResponse:
+def _reavaliar(aquario, db: Session) -> None:
+    """
+    Refaz os alertas depois de mudar quem mora no aquário.
+
+    Necessário porque a faixa ideal de pH e temperatura sai dos peixes:
+    entrar um peixe de água alcalina pode derrubar um alerta que existia,
+    e sair pode criar um novo.
+    """
+    db.flush()
+    db.expire(aquario, ["habitantes"])
+    regerar_alertas(aquario, db)
+
+
+def _montar_habitante(
+    item: AquarioEspecie, especie: Especie, tem_imagem: bool = False
+) -> HabitanteResponse:
     return HabitanteResponse(
         id=item.id,
         especie_id=especie.id,
@@ -125,6 +206,9 @@ def _montar_habitante(item: AquarioEspecie, especie: Especie) -> HabitanteRespon
         quantidade=item.quantidade,
         tamanho_adulto_cm=especie.tamanho_adulto_cm,
         comportamento=especie.comportamento,
+        imagem_miniatura=(
+            _url_imagem(especie.id, miniatura=True) if tem_imagem else None
+        ),
         adicionado_em=item.adicionado_em,
     )
 
@@ -156,7 +240,57 @@ def listar_especies(
             func.unaccent(func.lower(Especie.tipo_agua)) == _normalizar(tipo_agua)
         )
 
-    return query.order_by(Especie.nome_comum).all()
+    especies = query.order_by(Especie.nome_comum).all()
+    creditos = _creditos_das_imagens(db, [e.id for e in especies])
+    return [_montar_especie(e, creditos) for e in especies]
+
+
+# ═══════════════════════════════════════════════════════
+# IMAGENS DO CATÁLOGO
+# ═══════════════════════════════════════════════════════
+# Declarada antes de /{especie_id}/aquario/{aquario_id} para o "imagem"
+# não ser lido como id de aquário.
+@router.get("/{especie_id}/imagem")
+def imagem_da_especie(
+    especie_id: UUID,
+    tamanho: str = Query(
+        default="completa",
+        pattern="^(completa|miniatura)$",
+        description="miniatura = quadrada, para a lista; completa = card aberto",
+    ),
+    if_none_match: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """
+    Foto da espécie, direto do banco.
+
+    Sem token de propósito. O catálogo de peixes é o mesmo para todas as
+    lojas e não tem nada de ninguém dentro; exigir cabeçalho aqui só
+    atrapalharia o cache da imagem e faria a foto sumir quando a sessão
+    vencesse, no meio de uma lista rolando.
+    """
+    imagem = (
+        db.query(EspecieImagem)
+        .filter(EspecieImagem.especie_id == especie_id)
+        .first()
+    )
+    if imagem is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Espécie sem foto")
+
+    # O ETag inclui o tamanho: as duas versões saem da mesma linha, e sem
+    # isso a miniatura em cache responderia por um pedido da completa.
+    etag = f'"{imagem.hash}-{tamanho}"'
+    cabecalhos = {"ETag": etag, "Cache-Control": _CACHE_DA_IMAGEM}
+
+    if if_none_match == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=cabecalhos)
+
+    conteudo = imagem.miniatura if tamanho == "miniatura" else imagem.completa
+    return Response(
+        content=bytes(conteudo),
+        media_type=imagem.mime,
+        headers=cabecalhos,
+    )
 
 
 # ═══════════════════════════════════════════════════════
@@ -180,7 +314,11 @@ def listar_habitantes(
         .all()
     )
 
-    return [_montar_habitante(item, especie) for item, especie in linhas]
+    com_foto = _creditos_das_imagens(db, [especie.id for _, especie in linhas])
+    return [
+        _montar_habitante(item, especie, especie.id in com_foto)
+        for item, especie in linhas
+    ]
 
 
 @router.post(
@@ -258,10 +396,11 @@ def adicionar_ao_aquario(
         quantidade=dados.quantidade,
     )
     db.add(item)
+    _reavaliar(aquario, db)
     db.commit()
     db.refresh(item)
 
-    return _montar_habitante(item, especie)
+    return _montar_habitante(item, especie, _tem_imagem(especie.id, db))
 
 
 @router.put("/aquario/{aquario_id}/{item_id}", response_model=HabitanteResponse)
@@ -290,7 +429,8 @@ def atualizar_quantidade(
     db.commit()
     db.refresh(item)
 
-    return _montar_habitante(item, _buscar_especie(item.especie_id, db))
+    especie = _buscar_especie(item.especie_id, db)
+    return _montar_habitante(item, especie, _tem_imagem(especie.id, db))
 
 
 @router.delete("/aquario/{aquario_id}/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -301,7 +441,7 @@ def remover_do_aquario(
     usuario: Usuario = Depends(get_usuario_atual),
 ):
     """Remove uma espécie do aquário."""
-    _buscar_aquario(aquario_id, usuario, db)
+    aquario = _buscar_aquario(aquario_id, usuario, db)
 
     item = (
         db.query(AquarioEspecie)
@@ -315,6 +455,7 @@ def remover_do_aquario(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Espécie não está neste aquário")
 
     db.delete(item)
+    _reavaliar(aquario, db)
     db.commit()
     return None
 

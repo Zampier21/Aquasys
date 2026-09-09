@@ -4,4 +4,13 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Em desenvolvimento a API roda em http://<ip-da-maquina>:8000, sem
+         TLS. Do Android 9 em diante o sistema bloqueia tráfego em texto
+         claro por padrão, e a falha aparece no app como um erro de conexão
+         genérico — sem pista do motivo.
+
+         Fica só no manifesto de debug de propósito: a compilação de release
+         continua exigindo HTTPS, como deve ser em produção. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>

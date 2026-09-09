@@ -52,6 +52,13 @@ class EspecieResponse(EspecieBase):
     ativo: bool
     criado_em: datetime
 
+    # Caminhos na própria API. Nulos quando a espécie ainda não tem foto
+    # — assim o app desenha o ícone padrão sem gastar um 404 por peixe.
+    imagem: Optional[str] = None
+    imagem_miniatura: Optional[str] = None
+    # "Autor (CC BY-SA 4.0)". A licença das fotos exige exibir isto.
+    imagem_credito: Optional[str] = None
+
 
 # ═══════════════════════════════════════════════════════
 # ANÁLISE DE COMPATIBILIDADE
@@ -116,4 +123,6 @@ class HabitanteResponse(BaseModel):
     quantidade: int
     tamanho_adulto_cm: Optional[float] = None
     comportamento: Optional[str] = None
+    # Nulo = sem foto; o app desenha o ícone padrão.
+    imagem_miniatura: Optional[str] = None
     adicionado_em: datetime

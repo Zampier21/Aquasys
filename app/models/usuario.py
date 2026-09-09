@@ -1,4 +1,6 @@
-from sqlalchemy import Column, String, Boolean, DateTime, CheckConstraint, ForeignKey
+from sqlalchemy import (
+    Boolean, CheckConstraint, Column, DateTime, ForeignKey, String, Text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 import uuid
@@ -16,6 +18,8 @@ class Usuario(Base):
     tipo          = Column(String(10), nullable=False)
     dono_id       = Column(UUID(as_uuid=True), ForeignKey("usuario.id"), nullable=True)
     email         = Column(String(150), nullable=True)
+    # Foto de perfil / logo em base64 puro. Nulo = o app usa o ícone padrão.
+    avatar        = Column(Text, nullable=True)
     ativo         = Column(Boolean, nullable=False, default=True)
     criado_em     = Column(DateTime, nullable=False, default=func.now())
     atualizado_em = Column(DateTime, nullable=True)

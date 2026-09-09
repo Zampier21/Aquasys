@@ -3,12 +3,14 @@ from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.deps import get_usuario_atual
 from app.database import get_db
-from app.models.aquario import Aquario, HistoricoAquario, ParametrosAgua
+from app.models.alerta import Alerta
+from app.models.aquario import Aquario, ParametrosAgua
 from app.models.usuario import Usuario
+from app.services import parametros as svc_parametros
 from app.schemas.aquario import (
     AquarioCreate, AquarioResponse, AquarioUpdate,
     ParametrosCreate, ParametrosResponse,
@@ -21,9 +23,15 @@ router = APIRouter()
 # HELPERS
 # ═══════════════════════════════════════════════════════
 def _montar_resposta(aquario: Aquario) -> AquarioResponse:
-    """Achata a última medição e a última manutenção dentro do aquário."""
+    """
+    Achata a última medição dentro do aquário e já avalia os parâmetros.
+
+    A avaliação vem daqui de propósito: é a mesma regra que gera os alertas
+    do painel, então o card e a Home nunca podem discordar.
+    """
     ultima_medicao = aquario.parametros[0] if aquario.parametros else None
-    ultimo_evento = aquario.historico[0] if aquario.historico else None
+    habitantes = aquario.habitantes
+    problemas, _ = svc_parametros.avaliar(aquario, ultima_medicao, habitantes)
 
     return AquarioResponse(
         id=aquario.id,
@@ -32,12 +40,14 @@ def _montar_resposta(aquario: Aquario) -> AquarioResponse:
         temperatura=aquario.temperatura,
         ph=aquario.ph,
         tipo=aquario.tipo,
-        grupo_id=aquario.grupo_id,
         amonia_ppm=ultima_medicao.amonia_ppm if ultima_medicao else 0,
         nitrito_ppm=ultima_medicao.nitrito_ppm if ultima_medicao else 0,
         nitrato_ppm=ultima_medicao.nitrato_ppm if ultima_medicao else 0,
         medido_em=ultima_medicao.registrado_em if ultima_medicao else None,
-        ultima_manutencao=ultimo_evento.criado_em if ultimo_evento else None,
+        problemas=[p["parametro"] for p in problemas],
+        faixas=svc_parametros.faixas_em_texto(aquario, habitantes),
+        explicacoes=svc_parametros.explicar(aquario, ultima_medicao, habitantes),
+        escala_ph=svc_parametros.ESCALA_PH,
         criado_em=aquario.criado_em,
     )
 
@@ -64,6 +74,33 @@ def _buscar_aquario_do_usuario(
     return aquario
 
 
+def regerar_alertas(aquario: Aquario, db: Session) -> None:
+    """
+    Regrava os alertas do aquário a partir da última medição.
+
+    Sem histórico, por decisão de produto: valor novo apaga o anterior.
+    Chamado sempre que um parâmetro muda — é o que mantém o alerta
+    disponível para o celular lembrar o cliente com o app fechado.
+    """
+    db.query(Alerta).filter(Alerta.aquario_id == aquario.id).delete(
+        synchronize_session=False
+    )
+
+    medicao = aquario.parametros[0] if aquario.parametros else None
+    problemas, _ = svc_parametros.avaliar(aquario, medicao, aquario.habitantes)
+
+    for problema in problemas:
+        db.add(
+            Alerta(
+                aquario_id=aquario.id,
+                usuario_id=aquario.usuario_id,
+                mensagem=problema["mensagem"],
+                tipo="parametro",
+                lido=False,
+            )
+        )
+
+
 # ═══════════════════════════════════════════════════════
 # LISTAR
 # ═══════════════════════════════════════════════════════
@@ -73,8 +110,11 @@ def listar_aquarios(
     usuario: Usuario = Depends(get_usuario_atual),
 ):
     """Lista todos os aquários do usuário logado."""
+    # `selectinload` porque a resposta lê os peixes de cada aquário para
+    # decidir a faixa ideal: sem ele seria uma consulta por aquário.
     aquarios = (
         db.query(Aquario)
+        .options(selectinload(Aquario.habitantes))
         .filter(Aquario.usuario_id == usuario.id)
         .order_by(Aquario.criado_em)
         .all()
@@ -107,7 +147,6 @@ def criar_aquario(
     """Cria o aquário e já registra a primeira medição de parâmetros."""
     aquario = Aquario(
         usuario_id=usuario.id,
-        grupo_id=dados.grupo_id,
         nome=dados.nome,
         volume_litros=dados.volume_litros,
         temperatura=dados.temperatura,
@@ -124,6 +163,9 @@ def criar_aquario(
         nitrato_ppm=dados.nitrato_ppm,
     )
     db.add(medicao)
+    db.flush()
+    db.refresh(aquario)
+    regerar_alertas(aquario, db)
 
     db.commit()
     db.refresh(aquario)
@@ -175,6 +217,10 @@ def editar_aquario(
             )
         )
 
+    db.flush()
+    db.refresh(aquario)
+    regerar_alertas(aquario, db)
+
     db.commit()
     db.refresh(aquario)
     return _montar_resposta(aquario)
@@ -215,29 +261,3 @@ def historico_parametros(
         .limit(limite)
         .all()
     )
-
-
-@router.post(
-    "/{aquario_id}/parametros",
-    response_model=ParametrosResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def registrar_parametros(
-    aquario_id: UUID,
-    dados: ParametrosCreate,
-    db: Session = Depends(get_db),
-    usuario: Usuario = Depends(get_usuario_atual),
-):
-    """Registra uma nova medição sem alterar os demais dados do aquário."""
-    _buscar_aquario_do_usuario(aquario_id, usuario, db)
-
-    medicao = ParametrosAgua(
-        aquario_id=aquario_id,
-        amonia_ppm=dados.amonia_ppm,
-        nitrito_ppm=dados.nitrito_ppm,
-        nitrato_ppm=dados.nitrato_ppm,
-    )
-    db.add(medicao)
-    db.commit()
-    db.refresh(medicao)
-    return medicao

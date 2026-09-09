@@ -12,6 +12,12 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+
+        // Exigido pelo flutter_local_notifications: ele usa API de data e
+        // hora do Java 8 que o Android antigo não tem, e o desugaring é o
+        // que traz essa API para as versões mais velhas. Sem isto a
+        // compilação falha com "requires core library desugaring".
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -19,7 +25,8 @@ android {
         applicationId = "com.aquasys.aquasys_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // 24 é o piso do flutter_local_notifications.
+        minSdk = maxOf(flutter.minSdkVersion, 24)
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
@@ -36,6 +43,12 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+}
+
+dependencies {
+    // A biblioteca que o desugaring usa para preencher a API que falta
+    // no Android antigo. Versão pedida pelo flutter_local_notifications.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 kotlin {

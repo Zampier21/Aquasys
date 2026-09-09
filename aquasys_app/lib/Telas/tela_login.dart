@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../Tema/app_tema.dart';
-import '../services/auth_service.dart';
+import '../Services/auth_service.dart';
+import '../utils/documento.dart';
 import 'tela_inicial.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -17,6 +19,17 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _senhaVisivel     = false;
   bool _carregando       = false;
   String? _erro;
+  TipoDocumento _tipoDocumento = TipoDocumento.invalido;
+
+  @override
+  void initState() {
+    super.initState();
+    // Redesenha o campo quando o documento passa de CPF para CNPJ.
+    _cpfController.addListener(() {
+      final tipo = tipoDocumento(_cpfController.text);
+      if (tipo != _tipoDocumento) setState(() => _tipoDocumento = tipo);
+    });
+  }
 
   @override
   void dispose() {
@@ -79,12 +92,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     border: Border.all(color: AppTheme.bordaCard, width: 1),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF023E8A).withOpacity(0.08),
+                        color: const Color(0xFF023E8A).withValues(alpha: 0.08),
                         blurRadius: 32,
                         offset: const Offset(0, 8),
                       ),
                       BoxShadow(
-                        color: const Color(0xFF0096C7).withOpacity(0.05),
+                        color: const Color(0xFF0096C7).withValues(alpha: 0.05),
                         blurRadius: 16,
                         offset: const Offset(0, 4),
                       ),
@@ -166,17 +179,40 @@ class _LoginScreenState extends State<LoginScreen> {
                         TextFormField(
                           controller: _cpfController,
                           keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            CpfCnpjInputFormatter(),
+                          ],
                           style: const TextStyle(
-                              fontSize: 14, color: AppTheme.hintCampo),
-                          decoration: const InputDecoration(
+                              fontSize: 14, color: AppTheme.textoFraco),
+                          decoration: InputDecoration(
                             hintText: '999.999.999-99 ou 99.999.999/0001-99',
+                            // Mostra ao vivo o que o app reconheceu enquanto digita.
+                            suffixIcon: _tipoDocumento == TipoDocumento.invalido
+                                ? null
+                                : Padding(
+                                    padding: const EdgeInsets.only(right: 14),
+                                    child: Align(
+                                      widthFactor: 1,
+                                      child: Text(
+                                        _tipoDocumento == TipoDocumento.cpf
+                                            ? 'CPF'
+                                            : 'CNPJ',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppTheme.primaria,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                           ),
-                          validator: (v) {
-                            if (v == null || v.isEmpty) {
-                              return 'Informe o CPF ou CNPJ';
-                            }
-                            return null;
-                          },
+                          // No login não conferimos dígito verificador: quem
+                          // define o documento válido é o cadastro.
+                          validator: (v) => validarDocumento(
+                            v,
+                            exigirDigitoVerificador: false,
+                          ),
                         ),
                         const SizedBox(height: 20),
 

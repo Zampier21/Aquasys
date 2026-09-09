@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../Tema/app_tema.dart';
 import '../widgets/bottom_nav.dart';
-import '../services/aquario_service.dart';
-import '../services/peixe_service.dart';
+import '../widgets/cabecalho_usuario.dart';
+import '../widgets/foto_especie.dart';
+import '../Services/api.dart';
+import '../Services/aquario_service.dart';
+import '../Services/peixe_service.dart';
 import 'tela_inicial.dart';
 import 'tela_aquarios.dart';
 import 'tela_clientes.dart';
@@ -20,19 +23,6 @@ class TelaPeixes extends StatefulWidget {
 }
 
 class _TelaPeixesState extends State<TelaPeixes> {
-  static final List<BoxShadow> _sombraCard = [
-    BoxShadow(
-      color: const Color(0xFF023E8A).withOpacity(0.06),
-      blurRadius: 24,
-      spreadRadius: -6,
-      offset: const Offset(0, 10),
-    ),
-    BoxShadow(
-      color: const Color(0xFF023E8A).withOpacity(0.04),
-      blurRadius: 6,
-      offset: const Offset(0, 2),
-    ),
-  ];
 
   // Paleta usada para dar identidade visual a cada espécie
   static const List<Color> _paleta = [
@@ -75,30 +65,36 @@ class _TelaPeixesState extends State<TelaPeixes> {
       _erro = null;
     });
 
-    final respAquarios = await AquarioService.listar();
-    final respEspecies = await PeixeService.listarEspecies(busca: _busca);
-    if (!mounted) return;
+    // O try/finally existe porque um erro no meio do caminho já deixou
+    // esta tela presa no "carregando" para sempre: sem ele, a linha que
+    // desliga o spinner nunca era alcançada e o usuário via só o aviso
+    // de "cadastre um aquário", mesmo tendo aquários.
+    try {
+      final respAquarios = await AquarioService.listar();
+      final respEspecies = await PeixeService.listarEspecies(busca: _busca);
+      if (!mounted) return;
 
-    if (respAquarios['sucesso'] != true) {
-      setState(() {
-        _carregando = false;
+      if (respAquarios['sucesso'] != true) {
         _erro = respAquarios['erro'];
-      });
-      return;
+        return;
+      }
+
+      _aquarios = Api.lista(respAquarios);
+      _aquarioSelecionado ??= _aquarios.isNotEmpty ? _aquarios.first : null;
+
+      if (respEspecies['sucesso'] == true) {
+        _especies = Api.lista(respEspecies);
+      } else {
+        _erro = respEspecies['erro'];
+      }
+
+      await _carregarDadosDoAquario();
+    } catch (e) {
+      _erro = 'Não foi possível carregar os peixes.';
+      debugPrint('tela_peixes: falha ao carregar — $e');
+    } finally {
+      if (mounted) setState(() => _carregando = false);
     }
-
-    _aquarios = List<Map<String, dynamic>>.from(respAquarios['dados']);
-    _aquarioSelecionado ??= _aquarios.isNotEmpty ? _aquarios.first : null;
-
-    if (respEspecies['sucesso'] == true) {
-      _especies = List<Map<String, dynamic>>.from(respEspecies['dados']);
-    } else {
-      _erro = respEspecies['erro'];
-    }
-
-    await _carregarDadosDoAquario();
-
-    if (mounted) setState(() => _carregando = false);
   }
 
   /// Recarrega o que depende do aquário selecionado: selos e habitantes.
@@ -118,7 +114,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
       _compat = Map<String, Map<String, dynamic>>.from(respCompat['dados']);
     }
     if (respHab['sucesso'] == true) {
-      _habitantes = List<Map<String, dynamic>>.from(respHab['dados']);
+      _habitantes = Api.lista(respHab);
     }
   }
 
@@ -136,7 +132,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
     final resp = await PeixeService.listarEspecies(busca: termo);
     if (!mounted) return;
     if (resp['sucesso'] == true) {
-      setState(() => _especies = List<Map<String, dynamic>>.from(resp['dados']));
+      setState(() => _especies = Api.lista(resp));
     }
   }
 
@@ -234,7 +230,10 @@ class _TelaPeixesState extends State<TelaPeixes> {
       body: SafeArea(
         child: Column(
           children: [
-            _buildHeader(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: CabecalhoUsuario(tipoUsuario: widget.tipoUsuario),
+            ),
             _buildBusca(),
             _buildFiltroAquarios(),
             if (_aquarioSelecionado != null) _buildParametrosAtuais(),
@@ -247,51 +246,6 @@ class _TelaPeixesState extends State<TelaPeixes> {
         currentIndex: 2,
         onTap: _onNavTap,
         isDono: widget.tipoUsuario == 'dono',
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    final isDono = widget.tipoUsuario == 'dono';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppTheme.ctaEntrar.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.business, color: AppTheme.ctaEntrar, size: 24),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isDono ? 'Olá, Empresa de aquarismo' : 'Olá, Cliente',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.tituloBemVindo,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  isDono ? 'Acesso empresarial' : 'Acesso cliente',
-                  style: const TextStyle(fontSize: 12, color: AppTheme.hintCampo),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined, color: AppTheme.hintCampo),
-            onPressed: () {},
-          ),
-        ],
       ),
     );
   }
@@ -407,27 +361,26 @@ class _TelaPeixesState extends State<TelaPeixes> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
         decoration: BoxDecoration(
-          color: const Color(0xFFEAF6FD),
+          color: AppTheme.superficieAzul,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.bordaCampo),
         ),
         child: Row(
           children: [
-            const Icon(Icons.tune_rounded, size: 16, color: AppTheme.ctaEntrar),
+            const Icon(Icons.tune_rounded, size: 16, color: AppTheme.primaria),
             const SizedBox(width: 9),
             const Text(
               'Seus parâmetros:',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: AppTheme.tituloBemVindo,
+                color: AppTheme.azulMedio,
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 'pH ${_n(aq['ph'])}   ·   ${_n(aq['temperatura'])} °C   ·   ${_n(aq['volume_litros'])}L',
-                style: const TextStyle(fontSize: 12, color: AppTheme.tituloBemVindo),
+                style: const TextStyle(fontSize: 12, color: AppTheme.azulMedio),
               ),
             ),
           ],
@@ -498,7 +451,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
       padding: const EdgeInsets.symmetric(vertical: 40),
       child: Column(
         children: [
-          Icon(Icons.search_off_rounded, size: 52, color: AppTheme.hintCampo.withOpacity(0.4)),
+          Icon(Icons.search_off_rounded, size: 52, color: AppTheme.hintCampo.withValues(alpha: 0.4)),
           const SizedBox(height: 12),
           const Text(
             'Nenhuma espécie encontrada',
@@ -511,7 +464,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
           const SizedBox(height: 4),
           Text(
             'Tente buscar por outro nome',
-            style: TextStyle(fontSize: 13, color: AppTheme.hintCampo.withOpacity(0.9)),
+            style: TextStyle(fontSize: 13, color: AppTheme.hintCampo.withValues(alpha: 0.9)),
           ),
         ],
       ),
@@ -554,7 +507,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
         color: AppTheme.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppTheme.bordaCard),
-        boxShadow: _sombraCard,
+        boxShadow: AppTheme.sombraCard,
       ),
       child: Column(
         children: [
@@ -582,7 +535,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
                       width: 30,
                       height: 30,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF00A878).withOpacity(0.12),
+                        color: const Color(0xFF00A878).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(9),
                       ),
                       child: const Center(
@@ -602,7 +555,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF00A878).withOpacity(0.12),
+                        color: const Color(0xFF00A878).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
@@ -620,7 +573,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
                       duration: const Duration(milliseconds: 200),
                       child: Icon(
                         Icons.keyboard_arrow_down_rounded,
-                        color: AppTheme.hintCampo.withOpacity(0.7),
+                        color: AppTheme.hintCampo.withValues(alpha: 0.7),
                         size: 22,
                       ),
                     ),
@@ -641,25 +594,12 @@ class _TelaPeixesState extends State<TelaPeixes> {
                         padding: const EdgeInsets.symmetric(vertical: 11),
                         child: Row(
                           children: [
-                            Container(
-                              width: 34,
-                              height: 34,
-                              decoration: BoxDecoration(
-                                color: _paleta[
-                                        (h['nome_comum']?.toString() ?? '').hashCode.abs() %
-                                            _paleta.length]
-                                    .withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Center(
-                                child: FaIcon(
-                                  FontAwesomeIcons.fish,
-                                  size: 14,
-                                  color: _paleta[
-                                      (h['nome_comum']?.toString() ?? '').hashCode.abs() %
-                                          _paleta.length],
-                                ),
-                              ),
+                            FotoEspecie(
+                              caminho: h['imagem_miniatura']?.toString(),
+                              cor: _corEspecie(h),
+                              tamanho: 34,
+                              circular: false,
+                              proporcaoIcone: 0.41,
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -705,7 +645,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
                       if (i < _habitantes.length - 1)
                         Divider(
                           height: 1,
-                          color: AppTheme.bordaCard.withOpacity(0.7),
+                          color: AppTheme.bordaCard.withValues(alpha: 0.7),
                           indent: 46,
                         ),
                     ],
@@ -731,18 +671,20 @@ class _TelaPeixesState extends State<TelaPeixes> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: AppTheme.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _corBorda(decisao)),
-        boxShadow: _sombraCard,
+        // Fechado o card é a linha azul-clara da lista; aberto, branco.
+        color: expandido ? AppTheme.white : AppTheme.superficieAzul,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: expandido ? _corBorda(decisao) : Colors.transparent,
+        ),
       ),
       child: Column(
         children: [
           Material(
-            color: Colors.transparent,
+            color: AppTheme.superficieAzul,
             child: InkWell(
-              borderRadius: BorderRadius.circular(15),
               onTap: () => setState(() {
                 expandido ? _abertos.remove(id) : _abertos.add(id);
               }),
@@ -750,16 +692,10 @@ class _TelaPeixesState extends State<TelaPeixes> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 child: Row(
                   children: [
-                    Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        color: cor.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Center(
-                        child: FaIcon(FontAwesomeIcons.fish, size: 18, color: cor),
-                      ),
+                    FotoEspecie(
+                      caminho: e['imagem_miniatura']?.toString(),
+                      cor: cor,
+                      tamanho: 42,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -794,7 +730,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
                             style: TextStyle(
                               fontSize: 12,
                               fontStyle: FontStyle.italic,
-                              color: AppTheme.hintCampo.withOpacity(0.95),
+                              color: AppTheme.hintCampo.withValues(alpha: 0.95),
                             ),
                           ),
                         ],
@@ -807,7 +743,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
                       duration: const Duration(milliseconds: 200),
                       child: Icon(
                         Icons.keyboard_arrow_down_rounded,
-                        color: AppTheme.hintCampo.withOpacity(0.7),
+                        color: AppTheme.hintCampo.withValues(alpha: 0.7),
                         size: 22,
                       ),
                     ),
@@ -824,25 +760,37 @@ class _TelaPeixesState extends State<TelaPeixes> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    height: 96,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [cor.withOpacity(0.16), cor.withOpacity(0.05)],
+                  // Com foto no catálogo, o banner vira a foto de verdade;
+                  // sem ela, continua o degradê com o ícone, que é melhor
+                  // do que um buraco no meio do card.
+                  if (e['imagem'] != null)
+                    FotoEspecieGrande(
+                      caminho: e['imagem']?.toString(),
+                      credito: e['imagem_credito']?.toString(),
+                    )
+                  else
+                    Container(
+                      height: 96,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            cor.withValues(alpha: 0.16),
+                            cor.withValues(alpha: 0.05),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: FaIcon(
-                        FontAwesomeIcons.fish,
-                        size: 42,
-                        color: cor.withOpacity(0.55),
+                      child: Center(
+                        child: FaIcon(
+                          FontAwesomeIcons.fish,
+                          size: 42,
+                          color: cor.withValues(alpha: 0.55),
+                        ),
                       ),
                     ),
-                  ),
                   const SizedBox(height: 14),
 
                   Row(
@@ -928,7 +876,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
                               style: TextStyle(
                                 fontSize: 12.5,
                                 height: 1.4,
-                                color: Colors.black.withOpacity(0.62),
+                                color: Colors.black.withValues(alpha: 0.62),
                               ),
                             ),
                           ),
@@ -1038,7 +986,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
       decoration: BoxDecoration(
         color: fundo,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cor.withOpacity(0.35)),
+        border: Border.all(color: cor.withValues(alpha: 0.35)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1282,7 +1230,7 @@ class _DialogAdicionarState extends State<_DialogAdicionar> {
                     width: 38,
                     height: 38,
                     decoration: BoxDecoration(
-                      color: widget.cor.withOpacity(0.12),
+                      color: widget.cor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(11),
                     ),
                     child: Center(
@@ -1513,7 +1461,7 @@ class _DialogAdicionarState extends State<_DialogAdicionar> {
           width: 46,
           height: 46,
           decoration: BoxDecoration(
-            color: ativo ? AppTheme.ctaEntrar.withOpacity(0.10) : AppTheme.backgroundApp,
+            color: ativo ? AppTheme.ctaEntrar.withValues(alpha: 0.10) : AppTheme.backgroundApp,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: ativo ? AppTheme.bordaCampo : AppTheme.bordaCard,
@@ -1522,7 +1470,7 @@ class _DialogAdicionarState extends State<_DialogAdicionar> {
           child: Icon(
             icon,
             size: 20,
-            color: ativo ? AppTheme.ctaEntrar : AppTheme.hintCampo.withOpacity(0.4),
+            color: ativo ? AppTheme.ctaEntrar : AppTheme.hintCampo.withValues(alpha: 0.4),
           ),
         ),
       ),

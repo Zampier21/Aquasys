@@ -11,24 +11,11 @@ from sqlalchemy.sql import func
 from app.database import Base
 
 
-class GrupoAquario(Base):
-    __tablename__ = "grupo_aquario"
-
-    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuario.id", ondelete="CASCADE"), nullable=False)
-    nome       = Column(String(100), nullable=False)
-    descricao  = Column(Text, nullable=True)
-    criado_em  = Column(DateTime, nullable=False, server_default=func.now())
-
-    aquarios = relationship("Aquario", back_populates="grupo")
-
-
 class Aquario(Base):
     __tablename__ = "aquario"
 
     id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     usuario_id    = Column(UUID(as_uuid=True), ForeignKey("usuario.id", ondelete="CASCADE"), nullable=False)
-    grupo_id      = Column(UUID(as_uuid=True), ForeignKey("grupo_aquario.id", ondelete="SET NULL"), nullable=True)
     nome          = Column(String(100), nullable=False)
     volume_litros = Column(Float, nullable=False)
     temperatura   = Column(Float, nullable=False)
@@ -42,7 +29,6 @@ class Aquario(Base):
         CheckConstraint("ph BETWEEN 0 AND 14", name="chk_ph"),
     )
 
-    grupo = relationship("GrupoAquario", back_populates="aquarios")
     # Ordena do mais recente para o mais antigo: parametros[0] é sempre a última medição
     parametros = relationship(
         "ParametrosAgua",
@@ -50,11 +36,16 @@ class Aquario(Base):
         cascade="all, delete-orphan",
         order_by="desc(ParametrosAgua.registrado_em)",
     )
-    historico = relationship(
-        "HistoricoAquario",
-        back_populates="aquario",
-        cascade="all, delete-orphan",
-        order_by="desc(HistoricoAquario.criado_em)",
+
+    # Espécies que moram aqui. São elas que definem a faixa ideal de pH e
+    # temperatura: a água tem de servir a quem vive nela, não ao rótulo do
+    # tipo. Só leitura — quem grava o povoamento é o router de peixes,
+    # porque a associação carrega a quantidade.
+    habitantes = relationship(
+        "Especie",
+        secondary="aquario_especie",
+        viewonly=True,
+        order_by="Especie.nome_comum",
     )
 
 
@@ -69,17 +60,3 @@ class ParametrosAgua(Base):
     registrado_em = Column(DateTime, nullable=False, server_default=func.now())
 
     aquario = relationship("Aquario", back_populates="parametros")
-
-
-class HistoricoAquario(Base):
-    __tablename__ = "historico_aquario"
-
-    id               = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    aquario_id       = Column(UUID(as_uuid=True), ForeignKey("aquario.id", ondelete="CASCADE"), nullable=False)
-    registrado_por   = Column(UUID(as_uuid=True), ForeignKey("usuario.id"), nullable=False)
-    tipo_evento      = Column(String(30), nullable=False)
-    descricao        = Column(Text, nullable=True)
-    volume_trocado_l = Column(Float, nullable=True)
-    criado_em        = Column(DateTime, nullable=False, server_default=func.now())
-
-    aquario = relationship("Aquario", back_populates="historico")

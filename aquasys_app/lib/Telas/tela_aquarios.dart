@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../Tema/app_tema.dart';
 import '../widgets/bottom_nav.dart';
-import '../services/aquario_service.dart';
+import '../widgets/cabecalho_usuario.dart';
+import '../Services/aquario_service.dart';
 import 'tela_inicial.dart';
 import 'tela_peixes.dart';
 import 'tela_clientes.dart';
@@ -9,23 +10,22 @@ import 'tela_clientes.dart';
 // ═══════════════════════════════════════════════════════════
 // FAIXAS IDEAIS E DICAS DOS PARÂMETROS
 // ═══════════════════════════════════════════════════════════
+/// Texto explicativo de um parâmetro.
+///
+/// Só conteúdo de tela: a faixa ideal e a decisão de "está fora?" vêm
+/// da API, porque variam por tipo de aquário e precisam bater com o
+/// alerta que aparece no painel.
 class ParametroInfo {
   final String nome;
   final String campoApi;
-  final String faixaIdeal;
   final String oQueE;
   final List<String> dicas;
-  final double? min;
-  final double? max;
 
   const ParametroInfo({
     required this.nome,
     required this.campoApi,
-    required this.faixaIdeal,
     required this.oQueE,
     required this.dicas,
-    this.min,
-    this.max,
   });
 }
 
@@ -33,7 +33,6 @@ const Map<String, ParametroInfo> parametrosInfo = {
   'temperatura': ParametroInfo(
     nome: 'Temperatura',
     campoApi: 'temperatura',
-    faixaIdeal: '24 °C – 28 °C (peixes tropicais)',
     oQueE: 'A temperatura ideal varia por espécie. Peixes tropicais geralmente '
         'precisam de água aquecida e estável ao longo do dia.',
     dicas: [
@@ -41,13 +40,10 @@ const Map<String, ParametroInfo> parametrosInfo = {
       'Temperatura muito baixa deixa peixes lentos',
       'Temperatura muito alta reduz o oxigênio',
     ],
-    min: 24,
-    max: 28,
   ),
   'ph': ParametroInfo(
     nome: 'pH',
     campoApi: 'ph',
-    faixaIdeal: '6.5 – 7.0 (comunitário)',
     oQueE: 'O pH mede a acidez da água, numa escala de 0 a 14. Valores próximos de 7 são '
         'neutros. Cada espécie tem sua faixa de conforto.',
     dicas: [
@@ -55,13 +51,10 @@ const Map<String, ParametroInfo> parametrosInfo = {
       'Corrija sempre de forma gradual, ao longo de dias',
       'Meça sempre no mesmo horário do dia',
     ],
-    min: 6.5,
-    max: 7.0,
   ),
   'amonia': ParametroInfo(
     nome: 'Amônia (NH₃)',
     campoApi: 'amonia_ppm',
-    faixaIdeal: '0 ppm — sempre zero',
     oQueE: 'A amônia vem das fezes e da ração não consumida. É altamente tóxica: '
         'qualquer valor acima de zero já indica problema no aquário.',
     dicas: [
@@ -69,13 +62,10 @@ const Map<String, ParametroInfo> parametrosInfo = {
       'Reduza a alimentação até normalizar',
       'Nunca lave a mídia do filtro em água clorada',
     ],
-    min: 0,
-    max: 0,
   ),
   'nitrito': ParametroInfo(
     nome: 'Nitrito (NO₂)',
     campoApi: 'nitrito_ppm',
-    faixaIdeal: '0 ppm — sempre zero',
     oQueE: 'É o segundo estágio do ciclo do nitrogênio: as bactérias convertem amônia '
         'em nitrito. Continua sendo tóxico para os peixes.',
     dicas: [
@@ -83,13 +73,10 @@ const Map<String, ParametroInfo> parametrosInfo = {
       'Evite adicionar novos peixes nessa fase',
       'Faça trocas parciais até zerar',
     ],
-    min: 0,
-    max: 0,
   ),
   'nitrato': ParametroInfo(
     nome: 'Nitrato (NO₃)',
     campoApi: 'nitrato_ppm',
-    faixaIdeal: 'Abaixo de 40 ppm',
     oQueE: 'É o produto final do ciclo do nitrogênio. Bem menos tóxico que amônia e '
         'nitrito, mas o acúmulo favorece algas e estressa os peixes.',
     dicas: [
@@ -97,8 +84,6 @@ const Map<String, ParametroInfo> parametrosInfo = {
       'Plantas naturais ajudam a consumir nitrato',
       'Excesso de nitrato costuma causar algas',
     ],
-    min: 0,
-    max: 40,
   ),
 };
 
@@ -114,20 +99,6 @@ class TelaAquarios extends StatefulWidget {
 }
 
 class _TelaAquariosState extends State<TelaAquarios> {
-  static final List<BoxShadow> _sombraCard = [
-    BoxShadow(
-      color: const Color(0xFF023E8A).withOpacity(0.06),
-      blurRadius: 24,
-      spreadRadius: -6,
-      offset: const Offset(0, 10),
-    ),
-    BoxShadow(
-      color: const Color(0xFF023E8A).withOpacity(0.04),
-      blurRadius: 6,
-      offset: const Offset(0, 2),
-    ),
-  ];
-
   List<Map<String, dynamic>> _aquarios = [];
   final Set<String> _abertos = {};
   bool _carregando = true;
@@ -171,24 +142,39 @@ class _TelaAquariosState extends State<TelaAquarios> {
     );
   }
 
-  // ─── Detecta parâmetros fora da faixa ───────────────────
-  List<String> _parametrosComAlerta(Map<String, dynamic> aq) {
-    final problemas = <String>[];
-    for (final info in parametrosInfo.values) {
-      if (info.min == null || info.max == null) continue;
-      final valor = (aq[info.campoApi] as num?)?.toDouble();
-      if (valor == null) continue;
-      if (valor < info.min! || valor > info.max!) problemas.add(info.nome);
-    }
-    return problemas;
-  }
+  // ─── Parâmetros fora da faixa, decididos pelo servidor ──
+  //
+  // Chega pronto em `aq['problemas']` como lista de chaves
+  // ('temperatura', 'ph', ...). O app não recalcula nada: a regra
+  // depende do tipo do aquário e é a mesma que gera o alerta do painel.
+  List<String> _parametrosComAlerta(Map<String, dynamic> aq) =>
+      List<String>.from(aq['problemas'] ?? const []);
+
+  /// Faixa ideal deste aquário, também vinda da API.
+  ///
+  /// Com peixes cadastrados ela é a faixa que ELES aguentam, não a do
+  /// tipo do aquário: um comunitário de peixes alcalinos tem faixa de pH
+  /// alta e não deve ser acusado de erro por causa disso.
+  String _faixaIdeal(Map<String, dynamic> aq, String chave) =>
+      (aq['faixas'] as Map?)?[chave]?.toString() ?? '—';
+
+  /// Frase pronta explicando a situação do parâmetro, vinda da API.
+  ///
+  /// Quando o valor não serve, ela cita o peixe responsável — é a
+  /// diferença entre "pH 0.3 acima" e "o Neon Tetra vive em água mais
+  /// ácida".
+  String? _explicacao(Map<String, dynamic> aq, String chave) =>
+      (aq['explicacoes'] as Map?)?[chave]?.toString();
 
   String _textoAlerta(List<String> problemas) {
-    if (problemas.length == 1) {
-      return 'O parâmetro ${problemas.first} precisa de atenção';
+    final nomes = problemas
+        .map((c) => parametrosInfo[c]?.nome ?? c)
+        .toList();
+    if (nomes.length == 1) {
+      return 'O parâmetro ${nomes.first} precisa de atenção';
     }
-    final anteriores = problemas.sublist(0, problemas.length - 1).join(', ');
-    return 'Os parâmetros $anteriores e ${problemas.last} precisam de atenção';
+    final anteriores = nomes.sublist(0, nomes.length - 1).join(', ');
+    return 'Os parâmetros $anteriores e ${nomes.last} precisam de atenção';
   }
 
   // Converte ISO 8601 da API em dd/MM/aaaa
@@ -218,10 +204,20 @@ class _TelaAquariosState extends State<TelaAquarios> {
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => destino));
   }
 
-  void _mostrarDica(String chave) {
+  void _mostrarDica(String chave, [Map<String, dynamic>? aq]) {
     final info = parametrosInfo[chave];
     if (info == null) return;
-    showDialog(context: context, builder: (_) => _DialogDica(info: info));
+    showDialog(
+      context: context,
+      builder: (_) => _DialogDica(
+        chave: chave,
+        info: info,
+        faixa: aq == null ? null : _faixaIdeal(aq, chave),
+        explicacao: aq == null ? null : _explicacao(aq, chave),
+        escalaPh: aq?['escala_ph']?.toString(),
+        problema: aq != null && _parametrosComAlerta(aq).contains(chave),
+      ),
+    );
   }
 
   // ─── Formulário: criar ou editar ────────────────────────
@@ -288,7 +284,7 @@ class _TelaAquariosState extends State<TelaAquarios> {
           'Todo o histórico de parâmetros será perdido.',
           style: TextStyle(
             fontSize: 13.5,
-            color: Colors.black.withOpacity(0.65),
+            color: Colors.black.withValues(alpha: 0.65),
             height: 1.4,
           ),
         ),
@@ -328,7 +324,10 @@ class _TelaAquariosState extends State<TelaAquarios> {
       body: SafeArea(
         child: Column(
           children: [
-            _buildHeader(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: CabecalhoUsuario(tipoUsuario: widget.tipoUsuario),
+            ),
             _buildCardTitulo(),
             Expanded(child: _buildConteudo()),
           ],
@@ -343,54 +342,6 @@ class _TelaAquariosState extends State<TelaAquarios> {
   }
 
   // ═══════════════════════════════════════════════════
-  // HEADER
-  // ═══════════════════════════════════════════════════
-  Widget _buildHeader() {
-    final isDono = widget.tipoUsuario == 'dono';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppTheme.ctaEntrar.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.business, color: AppTheme.ctaEntrar, size: 24),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isDono ? 'Olá, Empresa de aquarismo' : 'Olá, Cliente',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.tituloBemVindo,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  isDono ? 'Acesso empresarial' : 'Acesso cliente',
-                  style: const TextStyle(fontSize: 12, color: AppTheme.hintCampo),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined, color: AppTheme.hintCampo),
-            onPressed: () {},
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════
   // CARD DE TÍTULO + CTA
   // ═══════════════════════════════════════════════════
   Widget _buildCardTitulo() {
@@ -400,14 +351,8 @@ class _TelaAquariosState extends State<TelaAquarios> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFFEAF6FD), Color(0xFFF4FAFE)],
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.bordaCampo),
-          boxShadow: _sombraCard,
+          color: AppTheme.superficieAzul,
+          borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           children: [
@@ -420,7 +365,7 @@ class _TelaAquariosState extends State<TelaAquarios> {
                     style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w800,
-                      color: AppTheme.tituloBemVindo,
+                      color: AppTheme.azulMedio,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -438,15 +383,13 @@ class _TelaAquariosState extends State<TelaAquarios> {
               icon: const Icon(Icons.add_rounded, size: 19),
               label: const Text('Novo'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.ctaEntrar,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(0, 44),
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-              ).copyWith(
-                elevation: WidgetStateProperty.all(4),
-                shadowColor: WidgetStateProperty.all(AppTheme.ctaEntrar.withOpacity(0.4)),
+                backgroundColor: AppTheme.primaria,
+                foregroundColor: AppTheme.white,
+                minimumSize: const Size(0, 40),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
               ),
             ),
           ],
@@ -503,7 +446,7 @@ class _TelaAquariosState extends State<TelaAquarios> {
             Icon(
               Icons.water_drop_outlined,
               size: 56,
-              color: AppTheme.hintCampo.withOpacity(0.4),
+              color: AppTheme.hintCampo.withValues(alpha: 0.4),
             ),
             const SizedBox(height: 12),
             const Text(
@@ -546,20 +489,23 @@ class _TelaAquariosState extends State<TelaAquarios> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: AppTheme.white,
-        borderRadius: BorderRadius.circular(16),
+        // Fechado, o card é a linha azul-clara da lista; aberto, o corpo
+        // vira branco para os parâmetros respirarem.
+        color: expandido ? AppTheme.white : AppTheme.superficieAzul,
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: temAlerta ? const Color(0xFFFCE4B0) : AppTheme.bordaCard,
+          color: temAlerta && expandido
+              ? AppTheme.alertaBorda
+              : Colors.transparent,
         ),
-        boxShadow: _sombraCard,
       ),
       child: Column(
         children: [
           Material(
-            color: Colors.transparent,
+            color: AppTheme.superficieAzul,
             child: InkWell(
-              borderRadius: BorderRadius.circular(15),
               onTap: () => setState(() {
                 expandido ? _abertos.remove(id) : _abertos.add(id);
               }),
@@ -567,16 +513,10 @@ class _TelaAquariosState extends State<TelaAquarios> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 child: Row(
                   children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: AppTheme.ctaEntrar.withOpacity(0.10),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
+                    const ChipIcone(
+                      icone: Icon(
                         Icons.water_drop_rounded,
-                        color: AppTheme.ctaEntrar,
+                        color: AppTheme.white,
                         size: 20,
                       ),
                     ),
@@ -593,7 +533,7 @@ class _TelaAquariosState extends State<TelaAquarios> {
                                   style: const TextStyle(
                                     fontSize: 15.5,
                                     fontWeight: FontWeight.w700,
-                                    color: AppTheme.tituloBemVindo,
+                                    color: AppTheme.azulMedio,
                                   ),
                                 ),
                               ),
@@ -603,7 +543,7 @@ class _TelaAquariosState extends State<TelaAquarios> {
                                   width: 7,
                                   height: 7,
                                   decoration: const BoxDecoration(
-                                    color: Color(0xFFF59E0B),
+                                    color: AppTheme.alertaPonto,
                                     shape: BoxShape.circle,
                                   ),
                                 ),
@@ -623,7 +563,7 @@ class _TelaAquariosState extends State<TelaAquarios> {
                     ),
                     _acaoIcone(
                       Icons.edit_outlined,
-                      AppTheme.hintCampo,
+                      AppTheme.primaria,
                       () => _abrirFormulario(aquario: aq),
                     ),
                     const SizedBox(width: 4),
@@ -638,7 +578,7 @@ class _TelaAquariosState extends State<TelaAquarios> {
                       duration: const Duration(milliseconds: 200),
                       child: Icon(
                         Icons.keyboard_arrow_down_rounded,
-                        color: AppTheme.hintCampo.withOpacity(0.7),
+                        color: AppTheme.hintCampo.withValues(alpha: 0.7),
                         size: 22,
                       ),
                     ),
@@ -661,7 +601,8 @@ class _TelaAquariosState extends State<TelaAquarios> {
                           'temperatura',
                           '${_num(aq['temperatura'])}°C',
                           Icons.thermostat_rounded,
-                          problemas.contains('Temperatura'),
+                          problemas.contains('temperatura'),
+                          aquario: aq,
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -670,7 +611,8 @@ class _TelaAquariosState extends State<TelaAquarios> {
                           'ph',
                           _num(aq['ph']),
                           Icons.science_outlined,
-                          problemas.contains('pH'),
+                          problemas.contains('ph'),
+                          aquario: aq,
                         ),
                       ),
                     ],
@@ -683,7 +625,7 @@ class _TelaAquariosState extends State<TelaAquarios> {
                       Icon(
                         Icons.event_rounded,
                         size: 15,
-                        color: AppTheme.hintCampo.withOpacity(0.8),
+                        color: AppTheme.hintCampo.withValues(alpha: 0.8),
                       ),
                       const SizedBox(width: 6),
                       Text(
@@ -748,15 +690,16 @@ class _TelaAquariosState extends State<TelaAquarios> {
     );
   }
 
-  Widget _paramFisico(String chave, String valor, IconData icon, bool alerta) {
+  Widget _paramFisico(String chave, String valor, IconData icon, bool alerta,
+      {Map<String, dynamic>? aquario}) {
     final info = parametrosInfo[chave]!;
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
       decoration: BoxDecoration(
-        color: alerta ? const Color(0xFFFFF9EC) : AppTheme.backgroundApp,
-        borderRadius: BorderRadius.circular(12),
+        color: alerta ? AppTheme.alertaFundo : AppTheme.white,
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: alerta ? const Color(0xFFFCE4B0) : AppTheme.bordaCard,
+          color: alerta ? AppTheme.alertaBorda : AppTheme.bordaCard,
         ),
       ),
       child: Row(
@@ -786,7 +729,7 @@ class _TelaAquariosState extends State<TelaAquarios> {
               ],
             ),
           ),
-          _botaoAjuda(chave),
+          _botaoAjuda(chave, aquario),
         ],
       ),
     );
@@ -796,9 +739,8 @@ class _TelaAquariosState extends State<TelaAquarios> {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
       decoration: BoxDecoration(
-        color: AppTheme.backgroundApp,
+        color: AppTheme.superficieAzul,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.bordaCard),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -824,21 +766,24 @@ class _TelaAquariosState extends State<TelaAquarios> {
                 child: _quimico(
                   'amonia',
                   _num(aq['amonia_ppm']),
-                  problemas.contains('Amônia (NH₃)'),
+                  problemas.contains('amonia'),
+                  aquario: aq,
                 ),
               ),
               Expanded(
                 child: _quimico(
                   'nitrito',
                   _num(aq['nitrito_ppm']),
-                  problemas.contains('Nitrito (NO₂)'),
+                  problemas.contains('nitrito'),
+                  aquario: aq,
                 ),
               ),
               Expanded(
                 child: _quimico(
                   'nitrato',
                   _num(aq['nitrato_ppm']),
-                  problemas.contains('Nitrato (NO₃)'),
+                  problemas.contains('nitrato'),
+                  aquario: aq,
                 ),
               ),
             ],
@@ -848,7 +793,8 @@ class _TelaAquariosState extends State<TelaAquarios> {
     );
   }
 
-  Widget _quimico(String chave, String valor, bool alerta) {
+  Widget _quimico(String chave, String valor, bool alerta,
+      {Map<String, dynamic>? aquario}) {
     final nomeCurto = {
       'amonia': 'Amônia',
       'nitrito': 'Nitrito',
@@ -874,25 +820,26 @@ class _TelaAquariosState extends State<TelaAquarios> {
               style: const TextStyle(fontSize: 11, color: AppTheme.hintCampo),
             ),
             const SizedBox(width: 2),
-            _botaoAjuda(chave, tamanho: 15),
+            _botaoAjuda(chave, aquario, tamanho: 15),
           ],
         ),
       ],
     );
   }
 
-  Widget _botaoAjuda(String chave, {double tamanho = 18}) {
+  Widget _botaoAjuda(String chave, Map<String, dynamic>? aquario,
+      {double tamanho = 18}) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => _mostrarDica(chave),
+        onTap: () => _mostrarDica(chave, aquario),
         customBorder: const CircleBorder(),
         child: Padding(
           padding: const EdgeInsets.all(3),
           child: Icon(
             Icons.help_outline_rounded,
             size: tamanho,
-            color: AppTheme.ctaEntrar.withOpacity(0.75),
+            color: AppTheme.ctaEntrar.withValues(alpha: 0.75),
           ),
         ),
       ),
@@ -904,8 +851,111 @@ class _TelaAquariosState extends State<TelaAquarios> {
 // DIALOG DE DICA
 // ═══════════════════════════════════════════════════════════
 class _DialogDica extends StatelessWidget {
+  final String chave;
   final ParametroInfo info;
-  const _DialogDica({required this.info});
+  final String? faixa;
+  final String? explicacao;
+  final String? escalaPh;
+  final bool problema;
+
+  const _DialogDica({
+    required this.chave,
+    required this.info,
+    this.faixa,
+    this.explicacao,
+    this.escalaPh,
+    this.problema = false,
+  });
+
+  /// Caixa colorida com título, usada nos dois blocos do topo.
+  Widget _caixa({
+    required IconData icone,
+    required String titulo,
+    required Widget corpo,
+    required Color fundo,
+    required Color borda,
+    required Color tinta,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: fundo,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borda),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icone, size: 16, color: tinta),
+              const SizedBox(width: 6),
+              Text(
+                titulo,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: tinta,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          corpo,
+        ],
+      ),
+    );
+  }
+
+  /// Régua do pH: ácida à esquerda, neutra no meio, alcalina à direita.
+  ///
+  /// Vale mais que o número solto — o cliente precisa saber ler a escala
+  /// antes de saber qual valor perseguir.
+  Widget _reguaPh() {
+    const faixas = [
+      ('0 – 6.8', 'Ácida', Color(0xFFE8734A)),
+      ('7.0', 'Neutra', Color(0xFF00A878)),
+      ('7.2 – 14', 'Alcalina', Color(0xFF2E86C1)),
+    ];
+
+    return Row(
+      children: [
+        for (final (intervalo, nome, cor) in faixas)
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.only(right: 6),
+              padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
+              decoration: BoxDecoration(
+                color: cor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: cor.withValues(alpha: 0.45)),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    nome,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: cor,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    intervalo,
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      color: AppTheme.hintCampo,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -946,43 +996,93 @@ class _DialogDica extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE7F8EF),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF9BDDBB)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: const [
-                        Icon(Icons.check_circle_rounded, size: 16, color: Color(0xFF00875A)),
-                        SizedBox(width: 6),
-                        Text(
-                          'Faixa Ideal',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF00875A),
-                          ),
+
+              // No pH, a régua vem antes de qualquer número: o cliente
+              // pediu para entender a escala, não decorar um intervalo.
+              if (chave == 'ph') ...[
+                _caixa(
+                  icone: Icons.straighten_rounded,
+                  titulo: 'Como funciona o pH',
+                  fundo: const Color(0xFFF1F6FB),
+                  borda: const Color(0xFFC5D8EA),
+                  tinta: AppTheme.azulMedio,
+                  corpo: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        escalaPh ??
+                            'De 0 a 6.8 a água é ácida, 7.0 é neutra e de '
+                                '7.2 até 14 é alcalina.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.45,
+                          color: Colors.black.withValues(alpha: 0.68),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      info.faixaIdeal,
-                      style: const TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF00694A),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 10),
+                      _reguaPh(),
+                    ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: 12),
+              ] else
+                _caixa(
+                  icone: Icons.check_circle_rounded,
+                  titulo: 'Faixa ideal',
+                  fundo: const Color(0xFFE7F8EF),
+                  borda: const Color(0xFF9BDDBB),
+                  tinta: const Color(0xFF00875A),
+                  corpo: Text(
+                    faixa ?? 'Depende do tipo do aquário',
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF00694A),
+                    ),
+                  ),
+                ),
+
+              // O diagnóstico do aquário de quem está olhando. Quando o
+              // valor não serve, o texto já vem da API dizendo qual peixe
+              // não aguenta e por quê.
+              if (explicacao != null) ...[
+                const SizedBox(height: 12),
+                _caixa(
+                  icone: problema
+                      ? Icons.warning_amber_rounded
+                      : Icons.verified_rounded,
+                  titulo: problema
+                      ? 'Neste aquário, atenção'
+                      : 'Neste aquário, tudo certo',
+                  fundo: problema
+                      ? const Color(0xFFFFF9EC)
+                      : const Color(0xFFE7F8EF),
+                  borda: problema
+                      ? const Color(0xFFFCE4B0)
+                      : const Color(0xFF9BDDBB),
+                  tinta: problema
+                      ? const Color(0xFFD97706)
+                      : const Color(0xFF00875A),
+                  corpo: Text(
+                    explicacao!,
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.45,
+                      color: Colors.black.withValues(alpha: 0.72),
+                    ),
+                  ),
+                ),
+                if (chave == 'ph' && faixa != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Faixa que serve aos peixes deste aquário: $faixa',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.hintCampo,
+                    ),
+                  ),
+                ],
+              ],
               const SizedBox(height: 18),
               const Text(
                 'O que é?',
@@ -997,7 +1097,7 @@ class _DialogDica extends StatelessWidget {
                 info.oQueE,
                 style: TextStyle(
                   fontSize: 13,
-                  color: Colors.black.withOpacity(0.68),
+                  color: Colors.black.withValues(alpha: 0.68),
                   height: 1.45,
                 ),
               ),
@@ -1022,7 +1122,7 @@ class _DialogDica extends StatelessWidget {
                         width: 5,
                         height: 5,
                         decoration: BoxDecoration(
-                          color: AppTheme.ctaEntrar.withOpacity(0.7),
+                          color: AppTheme.ctaEntrar.withValues(alpha: 0.7),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -1032,7 +1132,7 @@ class _DialogDica extends StatelessWidget {
                           d,
                           style: TextStyle(
                             fontSize: 13,
-                            color: Colors.black.withOpacity(0.68),
+                            color: Colors.black.withValues(alpha: 0.68),
                             height: 1.4,
                           ),
                         ),
@@ -1081,6 +1181,7 @@ class _FormularioAquarioState extends State<_FormularioAquario> {
   late final TextEditingController _amoniaCtrl;
   late final TextEditingController _nitritoCtrl;
   late final TextEditingController _nitratoCtrl;
+  String? _tipo;
   bool _salvando = false;
 
   @override
@@ -1094,6 +1195,7 @@ class _FormularioAquarioState extends State<_FormularioAquario> {
     _amoniaCtrl  = TextEditingController(text: a?['amonia_ppm']?.toString() ?? '0');
     _nitritoCtrl = TextEditingController(text: a?['nitrito_ppm']?.toString() ?? '0');
     _nitratoCtrl = TextEditingController(text: a?['nitrato_ppm']?.toString() ?? '0');
+    _tipo        = a?['tipo']?.toString();
   }
 
   @override
@@ -1121,6 +1223,7 @@ class _FormularioAquarioState extends State<_FormularioAquario> {
       'volume_litros': _paraDouble(_volumeCtrl.text),
       'temperatura': _paraDouble(_tempCtrl.text),
       'ph': _paraDouble(_phCtrl.text),
+      'tipo': _tipo,
       'amonia_ppm': _paraDouble(_amoniaCtrl.text),
       'nitrito_ppm': _paraDouble(_nitritoCtrl.text),
       'nitrato_ppm': _paraDouble(_nitratoCtrl.text),
@@ -1194,12 +1297,36 @@ class _FormularioAquarioState extends State<_FormularioAquario> {
               const SizedBox(height: 4),
               Text(
                 'Campos com * são obrigatórios',
-                style: TextStyle(fontSize: 12, color: Colors.black.withOpacity(0.45)),
+                style: TextStyle(fontSize: 12, color: Colors.black.withValues(alpha: 0.45)),
               ),
               const SizedBox(height: 20),
 
               _label('Nome do Aquário', obrigatorio: true),
               _campo(_nomeCtrl, 'Ex: Comunitário', obrigatorio: true),
+              const SizedBox(height: 16),
+
+              // O tipo define as faixas ideais: pH 8 é saudável num
+              // marinho e seria alarme num comunitário.
+              _label('Tipo de Aquário', obrigatorio: true),
+              DropdownButtonFormField<String>(
+                initialValue: _tipo,
+                isExpanded: true,
+                style: const TextStyle(fontSize: 14, color: AppTheme.azulEscuro),
+                hint: const Text(
+                  'Selecione o tipo',
+                  style: TextStyle(fontSize: 13, color: AppTheme.textoFraco),
+                ),
+                items: const [
+                  DropdownMenuItem(
+                      value: 'comunitario', child: Text('Comunitário')),
+                  DropdownMenuItem(value: 'doce', child: Text('Água doce')),
+                  DropdownMenuItem(value: 'plantado', child: Text('Plantado')),
+                  DropdownMenuItem(value: 'marinho', child: Text('Marinho')),
+                ],
+                onChanged: (v) => setState(() => _tipo = v),
+                validator: (v) =>
+                    v == null ? 'Escolha o tipo do aquário' : null,
+              ),
               const SizedBox(height: 16),
 
               Row(
@@ -1235,9 +1362,8 @@ class _FormularioAquarioState extends State<_FormularioAquario> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppTheme.backgroundApp,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppTheme.bordaCard),
+                  color: AppTheme.superficieAzul,
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1253,7 +1379,7 @@ class _FormularioAquarioState extends State<_FormularioAquario> {
                     const SizedBox(height: 2),
                     Text(
                       'Deixe em branco se ainda não testou',
-                      style: TextStyle(fontSize: 11.5, color: Colors.black.withOpacity(0.45)),
+                      style: TextStyle(fontSize: 11.5, color: Colors.black.withValues(alpha: 0.45)),
                     ),
                     const SizedBox(height: 14),
                     _label('Amônia (ppm)', ajuda: 'amonia'),
@@ -1283,16 +1409,8 @@ class _FormularioAquarioState extends State<_FormularioAquario> {
                     : Text(editando ? 'Salvar Alterações' : 'Criar Aquário'),
               ),
               const SizedBox(height: 10),
-              OutlinedButton(
+              BotaoCancelar(
                 onPressed: _salvando ? null : () => Navigator.pop(context),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 52),
-                  side: const BorderSide(color: AppTheme.error),
-                  foregroundColor: AppTheme.error,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                ),
-                child: const Text('Cancelar'),
               ),
             ],
           ),
@@ -1340,7 +1458,7 @@ class _FormularioAquarioState extends State<_FormularioAquario> {
                   child: Icon(
                     Icons.help_outline_rounded,
                     size: 16,
-                    color: AppTheme.ctaEntrar.withOpacity(0.75),
+                    color: AppTheme.ctaEntrar.withValues(alpha: 0.75),
                   ),
                 ),
               ),
