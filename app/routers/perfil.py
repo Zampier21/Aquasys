@@ -1,17 +1,3 @@
-"""
-Perfil da conta logada — o que a tela de Configurações edita.
-
-Tudo aqui age sobre `get_usuario_atual` e nada mais: não existe rota que
-receba o id de outro usuário. É de propósito. Trocar senha e foto são as
-operações mais sensíveis do app, e a forma mais simples de garantir que
-ninguém mexa na conta alheia é não oferecer o caminho.
-
-O que NÃO se edita por aqui:
-  - CPF/CNPJ, porque é a identidade da assinatura e quem valida o
-    documento é você, ao criar a conta;
-  - o tipo (dono | cliente), porque define o que a pessoa enxerga.
-"""
-
 import base64
 import binascii
 from datetime import datetime
@@ -28,13 +14,7 @@ from app.database import get_db
 from app.models.usuario import Usuario
 
 router = APIRouter()
-
-# 400 KB depois de decodificar. O app já reduz a imagem para 512 px antes
-# de enviar, então o limite só existe para barrar envio fora do app.
 TAMANHO_MAXIMO_AVATAR = 400 * 1024
-
-# Assinaturas de arquivo aceitas. Confiar na extensão ou no que o cliente
-# diz que mandou não serve: quem grava é o servidor, e ele confere.
 _ASSINATURAS = (
     (b"\xff\xd8\xff", "JPEG"),
     (b"\x89PNG\r\n\x1a\n", "PNG"),
@@ -66,8 +46,6 @@ class SenhaUpdate(BaseModel):
 
 
 class AvatarUpdate(BaseModel):
-    # Aceita tanto base64 puro quanto data URI — o app manda puro, mas
-    # colar um data URI no /docs é o jeito natural de testar.
     imagem: str = Field(..., min_length=1)
 
 
@@ -87,13 +65,6 @@ def _montar(usuario: Usuario) -> PerfilResponse:
 
 
 def _validar_imagem(bruto: str) -> str:
-    """
-    Confere que o texto recebido é mesmo uma imagem, e devolve o base64
-    limpo, pronto para gravar.
-
-    Recusar cedo aqui evita gravar lixo que só vai falhar na hora de
-    desenhar, dentro do app do cliente, sem mensagem nenhuma.
-    """
     conteudo = bruto.strip()
     if conteudo.startswith("data:"):
         _, _, conteudo = conteudo.partition(",")
@@ -166,13 +137,6 @@ def trocar_senha(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    """
-    Troca a senha exigindo a atual.
-
-    A senha atual é pedida mesmo já havendo token: token vaza, fica salvo
-    em aparelho emprestado, e sem essa checagem quem pegasse o celular
-    destrancado trocaria a senha e tomaria a conta.
-    """
     if not verificar_senha(dados.senha_atual, usuario.senha_hash):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, "A senha atual está incorreta"

@@ -51,12 +51,8 @@ class EspecieResponse(EspecieBase):
     id: UUID
     ativo: bool
     criado_em: datetime
-
-    # Caminhos na própria API. Nulos quando a espécie ainda não tem foto
-    # — assim o app desenha o ícone padrão sem gastar um 404 por peixe.
     imagem: Optional[str] = None
     imagem_miniatura: Optional[str] = None
-    # "Autor (CC BY-SA 4.0)". A licença das fotos exige exibir isto.
     imagem_credito: Optional[str] = None
 
 

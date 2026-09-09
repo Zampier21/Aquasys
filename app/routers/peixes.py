@@ -29,23 +29,11 @@ router = APIRouter()
 # BUSCA TOLERANTE
 # ═══════════════════════════════════════════════════════
 def _normalizar(texto: str) -> str:
-    """
-    Deixa o texto em minúsculas e remove acentos.
-
-    'Acará Bandeira' vira 'acara bandeira', permitindo que o cliente
-    encontre a espécie mesmo digitando sem acento.
-    """
     sem_acento = unicodedata.normalize("NFKD", texto.lower().strip())
     return "".join(c for c in sem_acento if not unicodedata.combining(c))
 
 
 def _filtro_busca(query, termo_bruto: str):
-    """
-    Aplica busca por palavras soltas, em qualquer ordem.
-
-    Cada palavra digitada precisa aparecer em algum dos campos de nome.
-    Assim 'tetra neon', 'neon tetra' e 'neon' encontram a mesma espécie.
-    """
     termos = [t for t in _normalizar(termo_bruto).split() if t]
     if not termos:
         return query
@@ -69,18 +57,10 @@ def _filtro_busca(query, termo_bruto: str):
 # ═══════════════════════════════════════════════════════
 # HELPERS
 # ═══════════════════════════════════════════════════════
-# Um mês de cache no aparelho. A foto de uma espécie não muda; quando
-# muda, o script troca o hash e a URL do ETag deixa de bater.
 _CACHE_DA_IMAGEM = "public, max-age=2592000"
 
 
 def _creditos_das_imagens(db: Session, ids=None) -> dict:
-    """
-    {especie_id: (autor, licenca)} das espécies que têm foto.
-
-    Consulta só as colunas de texto — de jeito nenhum os bytes. É o que
-    permite dizer ao app quais peixes têm foto sem carregar foto alguma.
-    """
     consulta = db.query(
         EspecieImagem.especie_id, EspecieImagem.autor, EspecieImagem.licenca
     )
@@ -165,12 +145,6 @@ def _buscar_especie(especie_id: UUID, db: Session) -> Especie:
 
 
 def _habitantes(aquario_id: UUID, db: Session, ignorar: Optional[UUID] = None):
-    """
-    Espécies presentes no aquário como lista de (Especie, quantidade).
-
-    `ignorar` exclui uma espécie da análise — usado ao editar a quantidade
-    de uma espécie que já está no aquário, para não comparar com ela mesma.
-    """
     query = (
         db.query(AquarioEspecie, Especie)
         .join(Especie, Especie.id == AquarioEspecie.especie_id)
@@ -183,13 +157,6 @@ def _habitantes(aquario_id: UUID, db: Session, ignorar: Optional[UUID] = None):
 
 
 def _reavaliar(aquario, db: Session) -> None:
-    """
-    Refaz os alertas depois de mudar quem mora no aquário.
-
-    Necessário porque a faixa ideal de pH e temperatura sai dos peixes:
-    entrar um peixe de água alcalina pode derrubar um alerta que existia,
-    e sair pode criar um novo.
-    """
     db.flush()
     db.expire(aquario, ["habitantes"])
     regerar_alertas(aquario, db)
@@ -248,8 +215,6 @@ def listar_especies(
 # ═══════════════════════════════════════════════════════
 # IMAGENS DO CATÁLOGO
 # ═══════════════════════════════════════════════════════
-# Declarada antes de /{especie_id}/aquario/{aquario_id} para o "imagem"
-# não ser lido como id de aquário.
 @router.get("/{especie_id}/imagem")
 def imagem_da_especie(
     especie_id: UUID,
@@ -261,14 +226,6 @@ def imagem_da_especie(
     if_none_match: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    """
-    Foto da espécie, direto do banco.
-
-    Sem token de propósito. O catálogo de peixes é o mesmo para todas as
-    lojas e não tem nada de ninguém dentro; exigir cabeçalho aqui só
-    atrapalharia o cache da imagem e faria a foto sumir quando a sessão
-    vencesse, no meio de uma lista rolando.
-    """
     imagem = (
         db.query(EspecieImagem)
         .filter(EspecieImagem.especie_id == especie_id)
@@ -276,9 +233,6 @@ def imagem_da_especie(
     )
     if imagem is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Espécie sem foto")
-
-    # O ETag inclui o tamanho: as duas versões saem da mesma linha, e sem
-    # isso a miniatura em cache responderia por um pedido da completa.
     etag = f'"{imagem.hash}-{tamanho}"'
     cabecalhos = {"ETag": etag, "Cache-Control": _CACHE_DA_IMAGEM}
 
@@ -295,7 +249,6 @@ def imagem_da_especie(
 
 # ═══════════════════════════════════════════════════════
 # POVOAMENTO — habitantes de cada aquário
-# Declarado antes de /{especie_id} para não haver conflito de rota
 # ═══════════════════════════════════════════════════════
 @router.get("/aquario/{aquario_id}", response_model=List[HabitanteResponse])
 def listar_habitantes(
@@ -336,15 +289,6 @@ def adicionar_ao_aquario(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    """
-    Adiciona uma espécie ao aquário.
-
-    A análise de compatibilidade roda antes de gravar:
-
-      bloqueado           → HTTP 409, não grava de jeito nenhum
-      requer_confirmacao  → HTTP 409 se confirmar=false; grava se confirmar=true
-      liberado            → grava direto
-    """
     aquario = _buscar_aquario(aquario_id, usuario, db)
     especie = _buscar_especie(dados.especie_id, db)
 
@@ -469,12 +413,6 @@ def especies_compativeis(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    """
-    Percorre o catálogo e classifica cada espécie para este aquário.
-
-    Alimenta os selos Ideal / Atenção / Evitar na tela de Peixes.
-    Considera também as espécies já presentes no aquário.
-    """
     aquario = _buscar_aquario(aquario_id, usuario, db)
     habitantes = _habitantes(aquario_id, db)
     excecoes = _carregar_excecoes(db)
@@ -509,11 +447,6 @@ def compatibilidade_com_aquario(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    """
-    Analisa se a espécie pode entrar no aquário, na quantidade informada.
-
-    Devolve uma das três decisões: liberado, requer_confirmacao ou bloqueado.
-    """
     especie = _buscar_especie(especie_id, db)
     aquario = _buscar_aquario(aquario_id, usuario, db)
 

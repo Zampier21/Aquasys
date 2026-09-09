@@ -1,11 +1,3 @@
-"""
-Fichas técnicas de manutenção.
-
-A ficha registra um atendimento presencial. O nome do cliente é digitado
-à mão de propósito: quem contrata manutenção nem sempre tem acesso ao app,
-então a ficha não se prende à lista de acessos cadastrados.
-"""
-
 from datetime import datetime
 from typing import List
 from uuid import UUID
@@ -50,8 +42,6 @@ MAQUINARIOS_PADRAO = [
     "Ozônio",
 ]
 
-# O banco guarda o código curto; o rótulo longo é só para a tela.
-# (codigo, rotulo, unidade sugerida)
 TESTES_PADRAO = [
     ("pH",   "PH",                               ""),
     ("KH",   "KH (Dureza de carbonatos)",        "dKH"),
@@ -79,13 +69,7 @@ def catalogos(usuario: Usuario = Depends(get_usuario_atual)):
         ],
     }
 
-
-# ═══════════════════════════════════════════════════════
 # CLIENTES DE MANUTENÇÃO
-#
-# Quem a loja visita em casa. Cadastro leve, sem login: existe para
-# o técnico não redigitar contato e dados do aquário a cada visita.
-# ═══════════════════════════════════════════════════════
 def _buscar_cliente(cliente_id: UUID, dono: Usuario, db: Session) -> ClienteManutencao:
     cliente = (
         db.query(ClienteManutencao)
@@ -210,12 +194,6 @@ def remover_cliente_manutencao(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    """
-    Tira o cliente da lista sem apagar as fichas dele.
-
-    As visitas já registradas continuam valendo — elas guardam o nome
-    do dia do atendimento e não dependem mais do cadastro.
-    """
     dono = exigir_dono(usuario)
     cliente = _buscar_cliente(cliente_id, dono, db)
 
@@ -248,12 +226,6 @@ def _buscar_ficha_do_dono(ficha_id: UUID, dono: Usuario, db: Session) -> FichaMa
 
 
 def _aplicar_filhos(ficha: FichaManutencao, dados) -> None:
-    """
-    Regrava as listas filhas da ficha.
-
-    Só mexe no que veio no corpo: uma lista ausente fica como está,
-    uma lista presente substitui a anterior por inteiro.
-    """
     if dados.equipamentos is not None:
         ficha.equipamentos = [
             ChecklistEquipamento(
@@ -318,13 +290,6 @@ def criar_ficha(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    """
-    Registra um atendimento.
-
-    Com `cliente_id`, o que ficar em branco é copiado do cadastro: nome,
-    tipo de instalação, litros e tipo de água. Assim a segunda visita ao
-    mesmo cliente só precisa do que mudou — data, horário e o serviço.
-    """
     dono = exigir_dono(usuario)
 
     campos = dados.model_dump(exclude={"equipamentos", "testes", "descricao"})

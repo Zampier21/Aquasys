@@ -36,14 +36,6 @@ class Resultado:
     def mensagens(self) -> List[str]:
         return [a.mensagem for a in self.achados]
 
-
-# ═══════════════════════════════════════════════════════════
-# CONSTANTES DAS REGRAS
-# Centralizadas para ficarem fáceis de justificar e ajustar
-# ═══════════════════════════════════════════════════════════
-
-# Um peixe engole o que couber na boca. A abertura bucal fica em torno
-# de 1/3 do comprimento do corpo — daí o fator 3.
 FATOR_PREDACAO = 3.0
 
 # Sobreposição de faixa considerada apertada demais para ser confortável
@@ -147,12 +139,6 @@ def avaliar_especie_no_aquario(especie, aquario) -> Resultado:
 # ESPÉCIE × ESPÉCIE
 # ═══════════════════════════════════════════════════════════
 def avaliar_par(a, b, excecao: Optional[dict] = None) -> Resultado:
-    """
-    Compatibilidade entre duas espécies.
-
-    `excecao` vem da tabela compatib_especie. Quando existe, substitui
-    o resultado das regras — é a curadoria humana tendo a palavra final.
-    """
     if excecao:
         r = Resultado()
         r.adicionar(
@@ -272,12 +258,6 @@ def avaliar_adicao(
     habitantes: List[tuple],
     excecoes: Optional[dict] = None,
 ) -> dict:
-    """
-    Análise completa antes de adicionar uma espécie ao aquário.
-
-    habitantes : lista de (especie, quantidade) já presentes
-    excecoes   : {(id_a, id_b): {...}} vindo de compatib_especie
-    """
     excecoes = excecoes or {}
     resultado = Resultado()
 

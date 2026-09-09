@@ -1,15 +1,3 @@
-"""
-Integração com o YouTube — sem chave de API.
-
-Usa o endpoint público **oEmbed**, que devolve título, canal e miniatura
-de um vídeo. Não tem cota nem precisa de projeto no Google Cloud, ao
-contrário da YouTube Data API.
-
-O vídeo é sempre reproduzido pelo player oficial (IFrame Player API) no
-app. Extrair o stream por fora violaria os Termos de Serviço do YouTube,
-então nada aqui baixa ou reencaminha mídia: guardamos apenas o id.
-"""
-
 import json
 import re
 import urllib.error
@@ -19,13 +7,8 @@ import xml.etree.ElementTree as ET
 from typing import List, Optional
 
 OEMBED = "https://www.youtube.com/oembed"
-# Feed público de playlist — publicado pelo YouTube para consumo, não
-# exige chave nem cota. Devolve no máximo 15 vídeos.
 FEED_PLAYLIST = "https://www.youtube.com/feeds/videos.xml"
 LIMITE_DO_FEED = 15
-
-# Data API — usada só quando existe YOUTUBE_API_KEY no .env. Custa 1
-# unidade por página de até 50 vídeos, de 10.000 diárias.
 API_PLAYLIST_ITEMS = "https://www.googleapis.com/youtube/v3/playlistItems"
 PAGINA_API = 50
 TIMEOUT_SEGUNDOS = 8
@@ -33,10 +16,6 @@ TIMEOUT_SEGUNDOS = 8
 # Um id de vídeo do YouTube tem 11 caracteres de [A-Za-z0-9_-].
 _ID_VIDEO = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
-# Formatos aceitos ao colar um link:
-#   youtube.com/watch?v=ID      youtu.be/ID
-#   youtube.com/embed/ID        youtube.com/shorts/ID
-#   youtube.com/live/ID
 _PADROES = [
     re.compile(r"[?&]v=([A-Za-z0-9_-]{11})"),
     re.compile(r"youtu\.be/([A-Za-z0-9_-]{11})"),
@@ -87,14 +66,6 @@ def extrair_id(url_ou_id: str) -> Optional[str]:
 
 
 def buscar_metadados(url_ou_id: str) -> dict:
-    """
-    Consulta o oEmbed e devolve `{youtube_id, titulo, canal, miniatura_url}`.
-
-    Levanta `VideoInvalido` quando a URL não é reconhecida, quando o vídeo
-    não existe ou quando o dono desabilitou a incorporação — nos três casos
-    o vídeo não serviria como aula, então é melhor recusar no cadastro do
-    que descobrir na hora de assistir.
-    """
     video_id = extrair_id(url_ou_id)
     if video_id is None:
         raise VideoInvalido(
@@ -141,17 +112,6 @@ def extrair_playlist_id(url: str) -> Optional[str]:
 
 
 def buscar_playlist(url_ou_id: str) -> dict:
-    """
-    Lê uma playlist pelo feed público do YouTube.
-
-    Devolve `{playlist_id, titulo, canal, videos: [...], truncada: bool}`,
-    onde cada vídeo é `{youtube_id, titulo, canal, miniatura_url}` — o
-    mesmo formato de `buscar_metadados`, para os dois caminhos alimentarem
-    a mesma rotina de cadastro.
-
-    `truncada` é True quando vieram 15 vídeos: o feed corta aí, então pode
-    haver mais na playlist que não dá para ver sem a Data API.
-    """
     playlist_id = extrair_playlist_id(url_ou_id) or (url_ou_id or "").strip()
     if not re.fullmatch(r"[A-Za-z0-9_-]{12,}", playlist_id):
         raise PlaylistInvalida(
@@ -217,12 +177,6 @@ def buscar_playlist(url_ou_id: str) -> dict:
 
 
 def _buscar_playlist_pela_api(playlist_id: str, chave: str) -> dict:
-    """
-    Lê a playlist inteira pela YouTube Data API, paginando.
-
-    Diferente do feed RSS, aqui não há teto de 15: uma playlist de 39
-    vídeos vem completa, em duas páginas.
-    """
     videos: List[dict] = []
     titulo = None
     canal = None
@@ -312,8 +266,6 @@ def _buscar_playlist_pela_api(playlist_id: str, chave: str) -> dict:
 
     return {
         "playlist_id": playlist_id,
-        # A API não devolve o nome da playlist em playlistItems; quem
-        # tem esse dado é o feed RSS. O chamador completa se precisar.
         "titulo": None,
         "canal": canal,
         "videos": videos,
@@ -322,15 +274,6 @@ def _buscar_playlist_pela_api(playlist_id: str, chave: str) -> dict:
 
 
 def buscar_playlist_completa(url_ou_id: str, chave: Optional[str] = None) -> dict:
-    """
-    Playlist inteira quando há chave da Data API; senão, os 15 do feed.
-
-    Mantém o mesmo formato de retorno nos dois caminhos, então quem chama
-    não precisa saber qual foi usado — só olhar `truncada` para saber se
-    ficou faltando coisa.
-    """
-    # O nome da playlist só existe no feed, então ele é lido de qualquer
-    # jeito: é barato e dá o título do curso.
     try:
         pelo_feed = buscar_playlist(url_ou_id)
     except PlaylistInvalida:

@@ -1,11 +1,3 @@
-"""
-Painel da tela inicial.
-
-Uma requisição só devolve tudo que a Home mostra: os três números do
-topo, os alertas abertos e as dicas. Antes esses valores eram texto fixo
-no app.
-"""
-
 from typing import List, Optional
 from uuid import UUID
 
@@ -37,8 +29,6 @@ class AlertaResponse(BaseModel):
 
 
 class DicaResponse(BaseModel):
-    # Dica de situação nasce do estado do aquário, não da tabela `dica`,
-    # então não tem id. O app usa o índice na lista como chave.
     id: Optional[UUID] = None
     conteudo: str
     categoria: Optional[str] = None
@@ -47,8 +37,6 @@ class DicaResponse(BaseModel):
 class PainelResponse(BaseModel):
     total_aquarios: int
     total_peixes: int
-    # Percentual de parâmetros dentro da faixa ideal. None quando ainda
-    # não há aquário nenhum — a tela mostra "—" em vez de fingir 100%.
     saude_geral: Optional[int] = None
     alertas: List[AlertaResponse]
     dicas: List[DicaResponse]
@@ -78,8 +66,6 @@ def painel(
         ) or 0
 
     # ─── Saúde geral ──────────────────────────────────
-    # Percentual das checagens aprovadas somando todos os aquários:
-    # 2 aquários × 5 parâmetros = 10 checagens; 1 fora = 90%.
     povoamento = _povoamento(ids, db)
 
     aprovadas = 0
@@ -122,8 +108,6 @@ def painel(
         dicas=_dicas_para(aquarios, povoamento, ids, db),
     )
 
-
-# A Home do Figma mostra três dicas.
 _QUANTAS_DICAS = 3
 
 
@@ -148,17 +132,6 @@ def _povoamento(ids_aquarios: list, db: Session) -> dict:
 def _dicas_para(
     aquarios: list, povoamento: dict, ids_aquarios: list, db: Session
 ) -> List[DicaResponse]:
-    """
-    Três dicas, da mais pessoal para a mais genérica.
-
-    1. Situação: lidas do estado atual dos aquários desta conta.
-    2. Espécie: o `especie_id` da tabela existe para isso — a dica sobre
-       cardume de tetra neon só aparece para quem tem tetra neon.
-    3. Geral: preenche o que sobrar, para a Home nunca ficar vazia.
-
-    A ordem importa: antes, as três vagas eram ocupadas pelas gerais e o
-    cliente via sempre o mesmo texto, sem relação com o aquário dele.
-    """
     escolhidas = [
         DicaResponse(conteudo=d["conteudo"], categoria=d["categoria"])
         for d in svc_dicas.situacionais(aquarios, povoamento)
@@ -193,12 +166,6 @@ def marcar_lido(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    """
-    Dispensa um alerta sem que o parâmetro tenha sido corrigido.
-
-    Ele volta na próxima medição que continuar fora da faixa — é o que
-    impede o lembrete diário de virar incômodo permanente.
-    """
     (
         db.query(Alerta)
         .filter(Alerta.id == alerta_id, Alerta.usuario_id == usuario.id)

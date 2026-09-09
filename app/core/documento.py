@@ -1,11 +1,3 @@
-"""
-CPF x CNPJ — normalização e validação.
-
-O app envia só os dígitos, mas o banco pode ter registros gravados
-com máscara ("000.000.000-00"). Todas as buscas por documento passam
-por aqui para comparar sempre digito-a-digito.
-"""
-
 import re
 
 _NAO_DIGITO = re.compile(r"\D")

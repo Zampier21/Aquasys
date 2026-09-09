@@ -1,10 +1,3 @@
-"""
-Clientes = usuários do tipo 'cliente' criados por um dono (loja).
-
-O dono cadastra o acesso; o cliente entra no mesmo app com o próprio
-CPF e vê a versão dele (com Cursos no lugar de Clientes).
-"""
-
 from datetime import datetime
 from typing import List
 from uuid import UUID
@@ -181,12 +174,6 @@ def excluir_cliente(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    """
-    Desativa o acesso em vez de apagar.
-
-    Os aquários e o histórico do cliente continuam existindo; apagar a
-    linha derrubaria tudo em cascata.
-    """
     dono = exigir_dono(usuario)
     cliente = _buscar_cliente_do_dono(cliente_id, dono, db)
 

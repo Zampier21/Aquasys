@@ -1,16 +1,3 @@
-"""
-Dicas da Home montadas a partir do aquário de quem está olhando.
-
-A tabela `dica` guarda conselho curado — geral ("troque 20% da água por
-semana") ou preso a uma espécie. Isso é bom, mas é sempre o mesmo texto
-para todo mundo, e o cliente logo para de ler.
-
-Aqui nascem as dicas de SITUAÇÃO: elas leem o estado atual dos aquários
-da conta e falam do que está acontecendo agora — o pH que não serve aos
-peixes de lá, o cardume incompleto, o aquário ainda vazio. Vêm primeiro
-na Home justamente porque são as únicas escritas para aquele aquário.
-"""
-
 from typing import Dict, List, Tuple
 
 from app.services import parametros as svc_parametros
@@ -83,13 +70,6 @@ def situacionais(
     aquarios: List,
     povoamento: Dict[object, List[Tuple]],
 ) -> List[dict]:
-    """
-    Dicas tiradas do estado atual dos aquários da conta.
-
-    `povoamento` mapeia id do aquário → lista de (Especie, quantidade).
-    A ordem da saída é a ordem de urgência: parâmetro errado primeiro,
-    depois convívio, e por último o aquário que nem começou.
-    """
     if not aquarios:
         return _sem_aquario()
 

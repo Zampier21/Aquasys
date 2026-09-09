@@ -83,8 +83,6 @@ class ClienteManutencaoResponse(ClienteManutencaoBase):
 
 # ─── Entrada: criar ficha ────────────────────────────────
 class FichaCreate(BaseModel):
-    # Com `cliente_id`, o nome e os dados da instalação que ficarem em
-    # branco são copiados do cadastro — é o que evita redigitar tudo.
     cliente_id: Optional[UUID] = None
     nome_cliente: Optional[str] = Field(default=None, min_length=2, max_length=150)
     nome_empresa: Optional[str] = Field(default=None, max_length=150)

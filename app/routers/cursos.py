@@ -1,15 +1,3 @@
-"""
-Cursos — trilhas de vídeos do YouTube sobre aquarismo.
-
-Visibilidade:
-  - curso com `dono_id` nulo  → global do AquaSys, todo mundo vê;
-  - curso com `dono_id` cheio → da loja, visível para ela e para os
-    clientes dela (via `usuario.dono_id`).
-
-O vídeo nunca é baixado nem reencaminhado: guardamos só o id e o app
-reproduz pelo player oficial do YouTube.
-"""
-
 from datetime import datetime
 from typing import List
 from uuid import UUID
@@ -35,11 +23,6 @@ router = APIRouter()
 # HELPERS
 # ═══════════════════════════════════════════════════════
 def _loja_do_usuario(usuario: Usuario) -> UUID | None:
-    """
-    De qual loja este usuário enxerga os cursos.
-
-    A loja vê os próprios; o cliente vê os da loja que o cadastrou.
-    """
     return usuario.id if usuario.tipo == "dono" else usuario.dono_id
 
 
@@ -107,11 +90,6 @@ def _buscar_curso_visivel(curso_id: UUID, usuario: Usuario, db: Session) -> Curs
 
 
 def _buscar_curso_da_loja(curso_id: UUID, usuario: Usuario, db: Session) -> Curso:
-    """
-    Para edição: a loja só mexe nos cursos dela.
-
-    Curso global é conteúdo do AquaSys — nenhuma loja edita ou apaga.
-    """
     if usuario.tipo != "dono":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -321,13 +299,6 @@ def adicionar_aula(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    """
-    Adiciona um vídeo do YouTube ao curso.
-
-    Basta colar o link: título, canal e miniatura vêm do próprio YouTube.
-    Link inválido, vídeo privado ou com incorporação desabilitada são
-    recusados aqui — melhor falhar no cadastro do que na hora de assistir.
-    """
     curso = _buscar_curso_da_loja(curso_id, usuario, db)
 
     try:
@@ -369,16 +340,6 @@ def importar_playlist(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    """
-    Importa de uma vez todos os vídeos de uma playlist do YouTube.
-
-    Lê o feed público da playlist — sem chave de API. O feed entrega no
-    máximo 15 vídeos; playlist maior que isso vem cortada, e o campo
-    `truncada` da resposta do YouTube é o que sinaliza.
-
-    Vídeo que já está no curso é pulado, então dá para reimportar a mesma
-    playlist depois para pegar episódios novos.
-    """
     curso = _buscar_curso_da_loja(curso_id, usuario, db)
 
     try:

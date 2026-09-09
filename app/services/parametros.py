@@ -1,19 +1,3 @@
-"""
-Faixas ideais dos parâmetros de água e geração de alertas.
-
-Fonte única da regra: antes, as faixas viviam duplicadas no app
-(`parametrosInfo`, em tela_aquarios.dart) e não existiam no servidor.
-Agora o app só exibe o que a API decidiu.
-
-A faixa sai de duas camadas, nesta ordem:
-
-1. O TIPO do aquário (doce | marinho | plantado | comunitario) — é o
-   palpite inicial, usado enquanto o aquário está vazio.
-2. Os PEIXES que moram nele — quando há habitantes cadastrados, são eles
-   que mandam. Um "comunitário" povoado só com ciclídeos africanos vive
-   em água alcalina, e acusar pH 8 de erro ali seria falso alarme.
-"""
-
 from dataclasses import dataclass, replace
 from typing import Dict, List, Optional
 
@@ -21,9 +5,6 @@ from typing import Dict, List, Optional
 # ═══════════════════════════════════════════════════════
 # ESCALA DE pH
 # ═══════════════════════════════════════════════════════
-# O cliente não sabe o que fazer com um intervalo solto ("6.5 – 7.0").
-# Saber ler o número é mais útil: por isso o app mostra a escala, e não
-# só a faixa.
 ESCALA_PH = (
     "O pH mede se a água é ácida ou alcalina: de 0 a 6.8 é ácida, "
     "7.0 é neutra e de 7.2 até 14 é alcalina."
@@ -67,9 +48,6 @@ class FaixaIdeal:
         if self.minimo == self.maximo == 0:
             return "0 ppm — sempre zero"
 
-        # Se um dos limites tem decimal, os dois mostram decimal: "6.5 – 7.0"
-        # lê melhor que "6.5 – 7" numa faixa de pH. E pH sempre mostra a
-        # casa: "6 – 7" parece grosseiro para uma escala de 0 a 14.
         decimal = self.chave == "ph" or self.minimo % 1 or self.maximo % 1
         fmt = (lambda v: f"{v:.1f}") if decimal else (lambda v: f"{v:g}")
 
@@ -135,14 +113,6 @@ _CAMPOS_ESPECIE = {
 
 
 def _faixa_dos_habitantes(base: FaixaIdeal, habitantes) -> FaixaIdeal:
-    """
-    Aperta a faixa do tipo com o que as espécies do aquário aguentam.
-
-    A mesma água serve todo mundo ao mesmo tempo, então o intervalo válido
-    é a interseção das tolerâncias: o maior dos mínimos e o menor dos
-    máximos. É isso que impede um comunitário povoado com peixes de água
-    alcalina de ser acusado de "pH acima do ideal" pela faixa genérica.
-    """
     campo_min, campo_max = _CAMPOS_ESPECIE[base.chave]
 
     limites = [
@@ -159,9 +129,6 @@ def _faixa_dos_habitantes(base: FaixaIdeal, habitantes) -> FaixaIdeal:
     _, teto, dono_teto = min(limites, key=lambda l: l[1])
 
     if piso > teto:
-        # As exigências não se cruzam — não existe água que agrade a todos.
-        # Alargar em vez de inventar um alvo impossível: quem aponta esse
-        # conflito é o motor de compatibilidade, não o alerta de parâmetro.
         return replace(
             base,
             minimo=min(l[0] for l in limites),
@@ -181,13 +148,6 @@ def _faixa_dos_habitantes(base: FaixaIdeal, habitantes) -> FaixaIdeal:
 
 
 def faixas_do_aquario(aquario, habitantes=None) -> List[FaixaIdeal]:
-    """
-    Faixas válidas para este aquário.
-
-    `habitantes` é a lista de `Especie` que vive nele. Quando vem vazia
-    (aquário novo), valem as faixas do tipo; sem tipo definido, assume
-    comunitário.
-    """
     tipo = (getattr(aquario, "tipo", None) or TIPO_PADRAO).lower()
     faixas = FAIXAS_POR_TIPO.get(tipo, FAIXAS_POR_TIPO[TIPO_PADRAO])
 
@@ -224,12 +184,6 @@ def _num_ph(valor: float) -> str:
 
 
 def _motivo_do_erro(faixa: FaixaIdeal, valor: float) -> str:
-    """
-    Por que este parâmetro está errado, citando o peixe responsável.
-
-    É a diferença entre "pH 0.3 acima do ideal" — que não diz o que fazer —
-    e "o Neon Tetra vive em água mais ácida".
-    """
     culpado = faixa.culpado(valor)
     alto = valor > faixa.maximo
 
@@ -282,11 +236,6 @@ def _confirmacao(faixa: FaixaIdeal, valor: float) -> str:
 
 
 def explicar(aquario, medicao, habitantes=None) -> Dict[str, str]:
-    """
-    Uma frase por parâmetro, dizendo se está certo e por quê.
-
-    É o que a tela de aquários mostra no lugar do intervalo cru.
-    """
     textos: Dict[str, str] = {}
 
     for faixa in faixas_do_aquario(aquario, habitantes):
@@ -313,15 +262,6 @@ def explicar(aquario, medicao, habitantes=None) -> Dict[str, str]:
 # AVALIAÇÃO
 # ═══════════════════════════════════════════════════════
 def avaliar(aquario, medicao, habitantes=None) -> tuple[List[dict], int]:
-    """
-    Confere os parâmetros de um aquário contra as faixas que valem para ele.
-
-    Devolve `(problemas, avaliados)`:
-    - `problemas`: um dicionário por parâmetro fora da faixa, pronto para
-      virar linha em `alerta` ou item da tela;
-    - `avaliados`: quantos parâmetros tinham valor para conferir. Parâmetro
-      sem medição não conta como aprovado — só fica de fora da conta.
-    """
     problemas = []
     avaliados = 0
 

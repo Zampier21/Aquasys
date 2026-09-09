@@ -12,16 +12,7 @@ from app.database import Base
 
 
 class Curso(Base):
-    """
-    Uma trilha de aprendizado — o "nome da aba" que agrupa vídeos.
-
-    `dono_id` nulo = curso global do AquaSys, que toda loja e todo cliente
-    enxergam. Preenchido = curso próprio daquela loja, visível só para ela
-    e para os clientes dela.
-    """
-
     __tablename__ = "curso"
-
     id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     dono_id       = Column(UUID(as_uuid=True), ForeignKey("usuario.id", ondelete="CASCADE"), nullable=True)
     titulo        = Column(String(150), nullable=False)
@@ -44,16 +35,7 @@ class Curso(Base):
 
 
 class Aula(Base):
-    """
-    Um vídeo do YouTube dentro de um curso.
-
-    Guardamos só o `youtube_id` — nunca a mídia. A reprodução acontece
-    pelo player oficial do YouTube dentro do app, que é o caminho previsto
-    nos Termos de Serviço deles.
-    """
-
     __tablename__ = "aula"
-
     id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     curso_id      = Column(UUID(as_uuid=True), ForeignKey("curso.id", ondelete="CASCADE"), nullable=False)
     titulo        = Column(String(200), nullable=False)
@@ -71,21 +53,12 @@ class Aula(Base):
 
 
 class ProgressoAula(Base):
-    """
-    Aula concluída por um usuário — a fonte da verdade do progresso.
-
-    O `percentual` de `progresso_curso` é cache derivado daqui, recalculado
-    a cada marcação.
-    """
-
     __tablename__ = "progresso_aula"
-
     id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     usuario_id    = Column(UUID(as_uuid=True), ForeignKey("usuario.id", ondelete="CASCADE"), nullable=False)
     aula_id       = Column(UUID(as_uuid=True), ForeignKey("aula.id", ondelete="CASCADE"), nullable=False)
     concluida     = Column(Boolean, nullable=False, default=False)
     atualizado_em = Column(DateTime, nullable=False, server_default=func.now())
-
     __table_args__ = (
         UniqueConstraint("usuario_id", "aula_id", name="uq_progresso_aula"),
     )

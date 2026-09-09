@@ -48,23 +48,9 @@ class AquarioResponse(BaseModel):
     nitrito_ppm: float = 0
     nitrato_ppm: float = 0
     medido_em: Optional[datetime] = None
-
-    # Parâmetros fora da faixa, avaliados pelo servidor conforme o TIPO
-    # do aquário. O app só pinta o que vem aqui — a regra vive num lugar só.
     problemas: List[str] = Field(default_factory=list)
-
-    # chave -> faixa ideal em texto ("24 °C – 28 °C"), para a tela de ajuda
-    # mostrar o intervalo certo para este aquário. Quando há peixes
-    # cadastrados, a faixa de pH e temperatura é a que eles aguentam, não
-    # a do tipo: comunitário de peixes alcalinos não leva alarme à toa.
     faixas: Dict[str, str] = Field(default_factory=dict)
-
-    # chave -> frase explicando a situação daquele parâmetro, citando o
-    # peixe responsável quando o valor não serve para ele.
     explicacoes: Dict[str, str] = Field(default_factory=dict)
-
-    # Como ler a escala de pH. Vale para qualquer aquário, mas viaja aqui
-    # para o app não ter texto de conteúdo escrito dentro dele.
     escala_ph: str = ""
 
     criado_em: datetime

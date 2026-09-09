@@ -1,21 +1,3 @@
-"""
-Busca e preparo das fotos do catálogo de espécies.
-
-Duas metades bem separadas:
-
-  - `preparar()` é função pura: recebe os bytes de uma imagem qualquer e
-    devolve as duas versões que o app consome, já no formato e tamanho
-    certos. Não sabe de onde a foto veio.
-  - `buscar()` fala com o Wikimedia Commons.
-
-De onde vêm as fotos, e por quê: o Commons hospeda imagem sob licença
-Creative Commons ou domínio público, o que permite uso comercial — e o
-AquaSys é um produto para vender. Pegar foto de resultado de busca
-comum seria mais fácil e violaria direito autoral de gente que não deu
-permissão nenhuma. O preço da escolha certa é ter de guardar autor e
-licença, porque quase toda licença CC exige crédito visível.
-"""
-
 import hashlib
 import io
 import re
@@ -30,12 +12,7 @@ from PIL import Image, ImageOps
 # ═══════════════════════════════════════════════════════
 # FORMATO DE SAÍDA
 # ═══════════════════════════════════════════════════════
-# A lista mostra a foto num círculo de 42 px. Num celular a 3x isso dá
-# 126 px reais, então 192 cobre com folga sem virar peso.
 LADO_MINIATURA = 192
-
-# O card aberto ocupa a largura da tela. 900 px atende telas grandes e
-# mantém o arquivo na casa de dezenas de KB.
 MAIOR_LADO_COMPLETA = 900
 
 QUALIDADE_COMPLETA = 85
@@ -66,13 +43,6 @@ class ImagemInvalida(Exception):
 
 
 def preparar(bruto: bytes) -> ImagemPronta:
-    """
-    Transforma uma imagem qualquer nas duas versões que o app consome.
-
-    A miniatura é recortada em quadrado, e não espremida: peixe achatado
-    para caber num círculo fica ridículo. `ImageOps.fit` corta as sobras
-    a partir do centro, que é onde o bicho costuma estar na foto.
-    """
     try:
         original = Image.open(io.BytesIO(bruto))
         original.load()

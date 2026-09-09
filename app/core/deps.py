@@ -16,12 +16,6 @@ def get_usuario_atual(
     credenciais: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
 ) -> Usuario:
-    """
-    Valida o JWT e devolve o usuário logado.
-
-    Qualquer endpoint que declare este Depends fica protegido:
-    sem token válido, a requisição nem chega na função.
-    """
     erro_credenciais = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Token inválido ou expirado",

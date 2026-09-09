@@ -28,19 +28,12 @@ class Aquario(Base):
         CheckConstraint("volume_litros > 0", name="chk_volume"),
         CheckConstraint("ph BETWEEN 0 AND 14", name="chk_ph"),
     )
-
-    # Ordena do mais recente para o mais antigo: parametros[0] é sempre a última medição
     parametros = relationship(
         "ParametrosAgua",
         back_populates="aquario",
         cascade="all, delete-orphan",
         order_by="desc(ParametrosAgua.registrado_em)",
     )
-
-    # Espécies que moram aqui. São elas que definem a faixa ideal de pH e
-    # temperatura: a água tem de servir a quem vive nela, não ao rótulo do
-    # tipo. Só leitura — quem grava o povoamento é o router de peixes,
-    # porque a associação carrega a quantidade.
     habitantes = relationship(
         "Especie",
         secondary="aquario_especie",
@@ -51,7 +44,6 @@ class Aquario(Base):
 
 class ParametrosAgua(Base):
     __tablename__ = "parametros_agua"
-
     id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     aquario_id    = Column(UUID(as_uuid=True), ForeignKey("aquario.id", ondelete="CASCADE"), nullable=False)
     amonia_ppm    = Column(Float, nullable=False, default=0)

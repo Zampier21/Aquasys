@@ -11,49 +11,23 @@ from app.database import Base
 
 
 class ClienteManutencao(Base):
-    """
-    Quem a loja visita em casa.
-
-    Não é o mesmo que o cliente com acesso ao app (esse vive em
-    `usuario`, com senha): aqui não há login nenhum. É agenda de
-    contato, para o técnico não redigitar os mesmos dados a cada
-    visita ao mesmo endereço.
-
-    Os campos de instalação repetem entre visitas, então saem daqui
-    pré-preenchidos na ficha — que pode divergir se o cliente trocou
-    de aquário e ainda não atualizou o cadastro.
-    """
-
     __tablename__ = "cliente_manutencao"
-
     id      = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     dono_id = Column(UUID(as_uuid=True), ForeignKey("usuario.id", ondelete="CASCADE"), nullable=False)
-
     nome     = Column(String(150), nullable=False)
     telefone = Column(String(30), nullable=True)
     endereco = Column(String(250), nullable=True)
-
     tipo_instalacao = Column(String(20), nullable=True)   # aquario | lago
     volume_litros   = Column(Integer, nullable=True)
     agua_doce       = Column(Boolean, nullable=True)      # False = marinho
-
     observacoes   = Column(Text, nullable=True)
     ativo         = Column(Boolean, nullable=False, default=True)
     criado_em     = Column(DateTime, nullable=False, server_default=func.now())
     atualizado_em = Column(DateTime, nullable=True)
-
     fichas = relationship("FichaManutencao", back_populates="cliente")
 
 
 class FichaManutencao(Base):
-    """
-    Ficha técnica de atendimento.
-
-    Atende quem a loja visita em casa — que não é a mesma lista de
-    quem tem acesso ao app. O contato fica em `ClienteManutencao` e é
-    reaproveitado entre visitas; aqui fica o que muda a cada uma.
-    """
-
     __tablename__ = "ficha_manutencao"
 
     id      = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -66,8 +40,6 @@ class FichaManutencao(Base):
     )
 
     # ─── Informações do atendimento ────────────────────
-    # Retrato do nome no dia do atendimento: cliente renomeado depois
-    # não reescreve a história das fichas antigas.
     nome_cliente     = Column(String(150), nullable=False)
     nome_empresa     = Column(String(150), nullable=True)
     data_atendimento = Column(Date, nullable=True)

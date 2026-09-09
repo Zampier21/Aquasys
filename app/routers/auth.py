@@ -21,19 +21,11 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     tipo_usuario: str
     nome: str
-    documento: str  # 'cpf' ou 'cnpj' — como o login foi reconhecido
-    # Foto/logo em base64. Vem já no login para o cabeçalho abrir com a
-    # imagem certa, sem uma segunda requisição só para isso.
+    documento: str 
     avatar: str | None = None
 
 
 def buscar_por_documento(db: Session, documento: str) -> Usuario | None:
-    """
-    Busca o usuário comparando apenas os dígitos.
-
-    Assim tanto faz o app mandar "00000000000" e o banco ter
-    "000.000.000-00" — ou o contrário.
-    """
     digitos = somente_digitos(documento)
     if not digitos:
         return None
@@ -52,9 +44,6 @@ def buscar_por_documento(db: Session, documento: str) -> Usuario | None:
 def login(dados: LoginInput, db: Session = Depends(get_db)):
     digitos = somente_digitos(dados.cpf_cnpj)
     tipo = tipo_documento(digitos)
-
-    # 11 dígitos = CPF (pessoa física), 14 = CNPJ (empresa). Qualquer
-    # outro tamanho nem chega a consultar o banco.
     if tipo is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

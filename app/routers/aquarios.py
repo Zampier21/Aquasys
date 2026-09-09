@@ -23,12 +23,6 @@ router = APIRouter()
 # HELPERS
 # ═══════════════════════════════════════════════════════
 def _montar_resposta(aquario: Aquario) -> AquarioResponse:
-    """
-    Achata a última medição dentro do aquário e já avalia os parâmetros.
-
-    A avaliação vem daqui de propósito: é a mesma regra que gera os alertas
-    do painel, então o card e a Home nunca podem discordar.
-    """
     ultima_medicao = aquario.parametros[0] if aquario.parametros else None
     habitantes = aquario.habitantes
     problemas, _ = svc_parametros.avaliar(aquario, ultima_medicao, habitantes)
@@ -55,12 +49,6 @@ def _montar_resposta(aquario: Aquario) -> AquarioResponse:
 def _buscar_aquario_do_usuario(
     aquario_id: UUID, usuario: Usuario, db: Session
 ) -> Aquario:
-    """
-    Busca o aquário filtrando SEMPRE pelo usuário logado.
-
-    Isso impede que alguém acesse o aquário de outra pessoa
-    apenas trocando o ID na URL.
-    """
     aquario = (
         db.query(Aquario)
         .filter(Aquario.id == aquario_id, Aquario.usuario_id == usuario.id)
@@ -75,13 +63,6 @@ def _buscar_aquario_do_usuario(
 
 
 def regerar_alertas(aquario: Aquario, db: Session) -> None:
-    """
-    Regrava os alertas do aquário a partir da última medição.
-
-    Sem histórico, por decisão de produto: valor novo apaga o anterior.
-    Chamado sempre que um parâmetro muda — é o que mantém o alerta
-    disponível para o celular lembrar o cliente com o app fechado.
-    """
     db.query(Alerta).filter(Alerta.aquario_id == aquario.id).delete(
         synchronize_session=False
     )
@@ -110,8 +91,6 @@ def listar_aquarios(
     usuario: Usuario = Depends(get_usuario_atual),
 ):
     """Lista todos os aquários do usuário logado."""
-    # `selectinload` porque a resposta lê os peixes de cada aquário para
-    # decidir a faixa ideal: sem ele seria uma consulta por aquário.
     aquarios = (
         db.query(Aquario)
         .options(selectinload(Aquario.habitantes))
