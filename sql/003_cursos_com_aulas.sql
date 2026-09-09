@@ -1,17 +1,3 @@
--- ═══════════════════════════════════════════════════════════
--- 003 — Cursos passam a ter aulas (vídeos do YouTube)
---
--- A tabela `curso` guardava só metadado: não havia onde pôr o
--- conteúdo. Agora um curso é uma coleção ordenada de aulas, e
--- cada aula é um vídeo do YouTube identificado pelo `youtube_id`
--- (os 11 caracteres depois de "watch?v=").
---
--- Também entra `dono_id`: nulo = curso global do AquaSys, visível
--- a todos; preenchido = curso próprio daquela loja.
---
--- Seguro de rodar mais de uma vez.
--- ═══════════════════════════════════════════════════════════
-
 BEGIN;
 
 -- ─── curso ─────────────────────────────────────────────────
@@ -41,7 +27,6 @@ CREATE INDEX IF NOT EXISTS idx_aula_curso ON aula (curso_id, ordem);
 
 -- ─── progresso por aula ────────────────────────────────────
 -- Fonte da verdade do progresso. O `percentual` de progresso_curso
--- vira cache recalculado a partir daqui a cada marcação.
 CREATE TABLE IF NOT EXISTS progresso_aula (
     id            UUID PRIMARY KEY,
     usuario_id    UUID NOT NULL REFERENCES usuario(id) ON DELETE CASCADE,

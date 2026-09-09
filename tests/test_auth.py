@@ -1,13 +1,4 @@
-"""
-Testes do login.
-
-O login é a única porta pública do sistema junto com o health check, e é
-onde se decide se quem entrou é loja ou cliente.
-"""
-
 from tests.conftest import SENHA
-
-
 class TestLogin:
     def test_entra_com_mascara(self, client, loja):
         r = client.post(

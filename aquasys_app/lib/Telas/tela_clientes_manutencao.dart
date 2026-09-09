@@ -3,10 +3,6 @@ import '../Tema/app_tema.dart';
 import '../Services/ficha_service.dart';
 import '../widgets/escolha_cliente.dart';
 
-/// Agenda de quem a loja atende em manutenção.
-///
-/// Não confundir com "Acessos para clientes": lá é quem tem login no
-/// app; aqui é quem recebe visita em casa, e não precisa de conta.
 class TelaClientesManutencao extends StatefulWidget {
   const TelaClientesManutencao({super.key});
 

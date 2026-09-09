@@ -1,32 +1,3 @@
-"""
-Popula os cursos GLOBAIS do AquaSys (os que toda loja e todo cliente veem).
-
-    python seed_cursos.py            importa
-    python seed_cursos.py --listar   mostra o que já está importado
-
-Curso global tem `dono_id` nulo — e é por isso que ele não pode ser criado
-pelo app: a rota POST /cursos/ sempre carimba a loja logada como dona.
-Este script é o caminho para o conteúdo que é seu, não de uma loja.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DE ONDE VÊM OS VÍDEOS
-
-1. `playlist` — o link da playlist. Sem chave de API isso usa o feed RSS
-   público do YouTube, que entrega no máximo 15 vídeos. É de graça e não
-   pede cadastro nenhum.
-
-2. `cursos.txt` — os links que você cola à mão, um por linha, embaixo do
-   nome do curso. É como se completa o que passou de 15.
-
-Os dois se somam, e link repetido é ignorado: dá para colar a playlist
-inteira em `cursos.txt` sem conferir o que já entrou. Rodar o script de
-novo nunca duplica nada.
-
-`esperado` é quantos vídeos a playlist tem de verdade — o script compara
-e diz quanto ainda falta.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-"""
-
 from app.core.console import preparar
 
 preparar()
@@ -120,16 +91,6 @@ def ler_links_do_arquivo() -> dict:
 def coletar_videos(
     dados: dict, links_manuais: list, ja_tem: set
 ) -> tuple[list, bool, list]:
-    """
-    Junta os vídeos da playlist com os colados à mão.
-
-    Devolve `(novos, truncada, ordem_playlist)`. `ordem_playlist` é a
-    sequência de youtube_id como o YouTube entrega — inclusive os que já
-    estavam no curso —, usada para consertar a ordem das aulas.
-
-    `ja_tem` são os youtube_id que o curso já tem: usado para não gastar
-    uma consulta ao YouTube por vídeo que seria descartado em seguida.
-    """
     videos, truncada, ordem_playlist = [], False, []
     vistos = set(ja_tem)
 
@@ -169,14 +130,6 @@ def coletar_videos(
 
 
 def reordenar(curso: Curso, ordem_playlist: list) -> bool:
-    """
-    Põe as aulas na sequência da playlist do YouTube.
-
-    Necessário porque o feed RSS pode pular vídeos do meio: importados
-    depois, eles seriam anexados no fim e a AULA 15 acabaria atrás da 16.
-    Vídeo que não está na playlist (colado à mão) vai para o final,
-    mantendo a ordem relativa que já tinha.
-    """
     posicao = {video_id: i for i, video_id in enumerate(ordem_playlist)}
     fim = len(posicao)
 
@@ -197,7 +150,6 @@ def reordenar(curso: Curso, ordem_playlist: list) -> bool:
 
 
 def listar() -> None:
-    """Mostra o que já está no banco, para conferir contra o YouTube."""
     db = SessionLocal()
     try:
         cursos = (

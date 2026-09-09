@@ -1,14 +1,3 @@
--- ═══════════════════════════════════════════════════════════
--- 001 — Ficha técnica deixa de depender do cliente cadastrado
---
--- Motivo: a ficha é controle de manutenção. Quem contrata
--- manutenção nem sempre tem acesso ao app, então o nome do
--- cliente passa a ser texto livre e cliente_id vira opcional
--- (fica só para quando o atendido também tem login).
---
--- Seguro de rodar mais de uma vez.
--- ═══════════════════════════════════════════════════════════
-
 BEGIN;
 
 -- ─── ficha_manutencao ──────────────────────────────────────
@@ -33,10 +22,6 @@ ALTER TABLE ficha_manutencao
     ALTER COLUMN nome_cliente SET NOT NULL,
     ALTER COLUMN cliente_id   DROP NOT NULL;
 
--- Horário é anotado como "14:30" na ficha de papel; TIMESTAMP
--- obrigava a inventar uma data junto.
--- O IF evita quebrar se o script rodar de novo (to_char não
--- aceita uma coluna que já virou texto).
 DO $$
 BEGIN
     IF EXISTS (

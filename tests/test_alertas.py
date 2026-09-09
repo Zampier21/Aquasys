@@ -1,12 +1,3 @@
-"""
-Testes dos alertas e do painel.
-
-O alerta é o que vira lembrete diário no celular do cliente, então o
-ciclo tem de fechar: nasce quando o parâmetro sai da faixa, some quando
-o parâmetro é corrigido, e não pode nascer errado por causa do tipo do
-aquário.
-"""
-
 from app.models.alerta import Alerta
 from app.models.especie import AquarioEspecie, Especie
 
@@ -133,12 +124,6 @@ class TestPainel:
 
 
 class TestOsPeixesMandamNaFaixa:
-    """
-    Ponta a ponta do ajuste pedido no teste em celular: um comunitário
-    povoado com peixes de água alcalina não pode ser acusado de "pH acima
-    do ideal", porque a faixa do tipo não vale mais que os habitantes.
-    """
-
     def povoar(self, db, aquario_id, especie):
         db.add(especie)
         db.flush()
@@ -195,11 +180,6 @@ class TestOsPeixesMandamNaFaixa:
 
 
 class TestDicasDaHome:
-    """
-    A Home mostrava sempre as mesmas três dicas gerais. Agora a dica nasce
-    do estado do aquário de quem está olhando.
-    """
-
     def test_sem_aquario_a_dica_convida_a_cadastrar(self, client, cab_loja):
         dicas = client.get("/painel/", headers=cab_loja).json()["dicas"]
         assert "Cadastre seu primeiro aquário" in dicas[0]["conteudo"]
@@ -243,12 +223,6 @@ class TestDicasDaHome:
 
 
 class TestPovoarRecalculaOAlerta:
-    """
-    Entrar ou sair um peixe muda a faixa ideal, então tem de mudar o
-    alerta junto — senão o lembrete no celular fica falando de um
-    problema que já não existe.
-    """
-
     def especie_alcalina(self, db):
         especie = Especie(
             nome_comum="Molinésia", ph_min=7.0, ph_max=8.5,

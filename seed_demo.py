@@ -1,26 +1,3 @@
-"""
-Cria as duas contas de demonstração, com conteúdo, para testar o app.
-
-    python seed_demo.py
-
-São os dois lados do produto:
-
-  LOJA    CNPJ 11.222.333/0001-81   senha aquasys123
-  CLIENTE CPF  123.456.789-09       senha cliente123
-
-O cliente é criado sob a loja, como o modelo exige (`dono_id`), e cada
-conta recebe aquários, peixes e alertas para as telas não abrirem vazias.
-
-Os valores são escolhidos para exercitar as regras, não para serem
-bonitos: o comunitário do cliente entra com pH fora da faixa (gera
-alerta) e o marinho da loja com pH 8,2 (que é o correto para marinho e
-NÃO pode gerar alerta).
-
-Seguro de rodar mais de uma vez: nada é duplicado.
-
-Depende de `seed_especies.py` ter rodado antes.
-"""
-
 from app.core.console import preparar
 
 preparar()

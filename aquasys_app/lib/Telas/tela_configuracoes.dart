@@ -9,11 +9,6 @@ import '../Services/notificacao_service.dart';
 import '../Services/perfil_service.dart';
 import 'tela_login.dart';
 
-/// Configurações da conta: foto, nome, senha e saída.
-///
-/// É a tela por trás da engrenagem do cabeçalho. Antes a engrenagem
-/// deslogava direto no toque — perigoso: um toque errado derrubava a
-/// sessão sem perguntar nada.
 class TelaConfiguracoes extends StatefulWidget {
   const TelaConfiguracoes({super.key});
 
@@ -68,9 +63,6 @@ class _TelaConfiguracoesState extends State<TelaConfiguracoes> {
 
   // ─── Foto / logo ────────────────────────────────────────
   Future<void> _escolherFoto(ImageSource origem) async {
-    // O redimensionamento acontece aqui, no aparelho: uma foto de câmera
-    // tem vários MB e a API recusa acima de 400 KB. 512 px com qualidade
-    // 85 dá uma imagem nítida no tamanho em que ela é exibida.
     final arquivo = await ImagePicker().pickImage(
       source: origem,
       maxWidth: 512,
@@ -690,7 +682,6 @@ class _DialogCampoState extends State<_DialogCampo> {
   }
 }
 
-/// Troca de senha: atual, nova e confirmação.
 class _DialogSenha extends StatefulWidget {
   const _DialogSenha();
 
@@ -734,8 +725,6 @@ class _DialogSenhaState extends State<_DialogSenha> {
       return;
     }
 
-    // O erro fica dentro do diálogo, e não num aviso que some: quase
-    // sempre é "a senha atual está incorreta" e a pessoa vai corrigir ali.
     setState(() {
       _salvando = false;
       _erro = resposta['erro'] ?? 'Não foi possível alterar a senha';

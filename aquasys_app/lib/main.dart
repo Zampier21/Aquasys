@@ -9,9 +9,6 @@ import 'Telas/tela_aquarios.dart';
 void main() {
   runApp(const AquaSysApp());
 }
-
-/// Permite navegar a partir do toque na notificação, que acontece fora
-/// da árvore de widgets e não tem um BuildContext próprio.
 final GlobalKey<NavigatorState> navegador = GlobalKey<NavigatorState>();
 
 class AquaSysApp extends StatelessWidget {
@@ -29,10 +26,6 @@ class AquaSysApp extends StatelessWidget {
   }
 }
 
-/// Decide entre login e Home enquanto o app abre.
-///
-/// O token já ficava salvo, mas ninguém o consultava: o usuário digitava
-/// a senha toda vez, mesmo com a sessão válida.
 class _Abertura extends StatefulWidget {
   const _Abertura();
 

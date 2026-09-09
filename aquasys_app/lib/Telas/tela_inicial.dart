@@ -67,10 +67,6 @@ class _TelaInicialState extends State<TelaInicial>
     }
   }
 
-  /// Reflete os alertas abertos nos lembretes do aparelho.
-  ///
-  /// A permissão só é pedida quando existe algo a notificar — pedir na
-  /// abertura, sem contexto, é o caminho mais curto para o usuário negar.
   Future<void> _sincronizarLembretes() async {
     final alertas = (_painel?['alertas'] as List?) ?? const [];
 
@@ -165,8 +161,6 @@ class _TelaInicialState extends State<TelaInicial>
   // ═══════════════════════════════════════════════════
   // CARDS DE RESUMO
   // ═══════════════════════════════════════════════════
-  /// Enquanto o painel não chega, o card mostra "—" em vez de zero:
-  /// zero é uma informação, "ainda carregando" não.
   String _numero(String campo, {String sufixo = ''}) {
     if (_carregando || _painel == null) return '—';
     final valor = _painel![campo];
@@ -587,10 +581,7 @@ class _TelaInicialState extends State<TelaInicial>
   // ATALHOS
   // ═══════════════════════════════════════════════════
   Widget _buildAtalhos(bool isDono) {
-    // IntrinsicHeight no lugar de altura fixa: os dois cards passam a ter
-    // exatamente a mesma altura — a do mais alto — e nada é cortado quando
-    // o celular está com a fonte do sistema aumentada. Era a altura travada
-    // em 108 que cortava a escrita e fazia um card parecer menor que o outro.
+
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -644,10 +635,7 @@ class _TelaInicialState extends State<TelaInicial>
             border: Border.all(color: AppTheme.bordaCard),
             boxShadow: AppTheme.sombraCard,
           ),
-          // Empilhado, e não lado a lado: em meia tela de celular o ícone,
-          // o texto e a seta na mesma linha deixavam menos de 50 px para a
-          // palavra, e "Aquários" não cabia. Na vertical o texto usa a
-          // largura inteira do card.
+
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,

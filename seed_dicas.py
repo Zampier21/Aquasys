@@ -1,19 +1,3 @@
-"""
-Popula a tabela `dica` com o conteúdo da Home.
-
-    python seed_dicas.py
-
-Seguro de rodar de novo: dica já existente (mesmo conteúdo) é ignorada.
-
-São dois tipos:
-  - gerais      (especie_id nulo) — valem para qualquer aquário;
-  - por espécie (especie_id preenchido) — só aparecem para quem tem
-    aquela espécie. Estas são derivadas dos próprios dados do catálogo,
-    então acompanham sozinhas qualquer espécie nova que você semear.
-
-Categorias aceitas pelo banco: quimica | comportamento | equipamento
-"""
-
 from app.core.console import preparar
 
 preparar()

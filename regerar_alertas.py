@@ -1,18 +1,3 @@
-"""
-Recalcula os alertas de todos os aquários.
-
-    python regerar_alertas.py
-
-Serve para duas situações:
-  - aquários criados antes de os alertas existirem, que nunca passaram
-    pelo gatilho de gravação;
-  - quando você mexe nas faixas ideais em `app/services/parametros.py`
-    e quer que os alertas já gravados reflitam a regra nova.
-
-No dia a dia não precisa rodar: cada medição nova já regrava os alertas
-do próprio aquário.
-"""
-
 from app.core.console import preparar
 
 preparar()

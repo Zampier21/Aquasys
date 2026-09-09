@@ -7,14 +7,6 @@ import 'tela_inicial.dart';
 import 'tela_peixes.dart';
 import 'tela_clientes.dart';
 
-// ═══════════════════════════════════════════════════════════
-// FAIXAS IDEAIS E DICAS DOS PARÂMETROS
-// ═══════════════════════════════════════════════════════════
-/// Texto explicativo de um parâmetro.
-///
-/// Só conteúdo de tela: a faixa ideal e a decisão de "está fora?" vêm
-/// da API, porque variam por tipo de aquário e precisam bater com o
-/// alerta que aparece no painel.
 class ParametroInfo {
   final String nome;
   final String campoApi;
@@ -142,27 +134,13 @@ class _TelaAquariosState extends State<TelaAquarios> {
     );
   }
 
-  // ─── Parâmetros fora da faixa, decididos pelo servidor ──
-  //
-  // Chega pronto em `aq['problemas']` como lista de chaves
-  // ('temperatura', 'ph', ...). O app não recalcula nada: a regra
-  // depende do tipo do aquário e é a mesma que gera o alerta do painel.
+
   List<String> _parametrosComAlerta(Map<String, dynamic> aq) =>
       List<String>.from(aq['problemas'] ?? const []);
 
-  /// Faixa ideal deste aquário, também vinda da API.
-  ///
-  /// Com peixes cadastrados ela é a faixa que ELES aguentam, não a do
-  /// tipo do aquário: um comunitário de peixes alcalinos tem faixa de pH
-  /// alta e não deve ser acusado de erro por causa disso.
   String _faixaIdeal(Map<String, dynamic> aq, String chave) =>
       (aq['faixas'] as Map?)?[chave]?.toString() ?? '—';
 
-  /// Frase pronta explicando a situação do parâmetro, vinda da API.
-  ///
-  /// Quando o valor não serve, ela cita o peixe responsável — é a
-  /// diferença entre "pH 0.3 acima" e "o Neon Tetra vive em água mais
-  /// ácida".
   String? _explicacao(Map<String, dynamic> aq, String chave) =>
       (aq['explicacoes'] as Map?)?[chave]?.toString();
 
@@ -908,10 +886,6 @@ class _DialogDica extends StatelessWidget {
     );
   }
 
-  /// Régua do pH: ácida à esquerda, neutra no meio, alcalina à direita.
-  ///
-  /// Vale mais que o número solto — o cliente precisa saber ler a escala
-  /// antes de saber qual valor perseguir.
   Widget _reguaPh() {
     const faixas = [
       ('0 – 6.8', 'Ácida', Color(0xFFE8734A)),
@@ -1042,9 +1016,7 @@ class _DialogDica extends StatelessWidget {
                   ),
                 ),
 
-              // O diagnóstico do aquário de quem está olhando. Quando o
-              // valor não serve, o texto já vem da API dizendo qual peixe
-              // não aguenta e por quê.
+            
               if (explicacao != null) ...[
                 const SizedBox(height: 12),
                 _caixa(

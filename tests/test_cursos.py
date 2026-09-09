@@ -1,11 +1,3 @@
-"""
-Testes de cursos.
-
-Duas regras a prender:
-  - publicar é da loja; o cliente só assiste;
-  - o progresso é de cada pessoa, não do curso.
-"""
-
 import pytest
 
 from app.models.curso import Aula, Curso
@@ -168,12 +160,6 @@ class TestProgresso:
 
 
 class TestExclusao:
-    """
-    A tela da loja ganhou seleção múltipla e botão de excluir. O que a
-    interface deixa marcar tem de bater com o que a API deixa apagar,
-    senão o usuário marca cinco e recebe erro em dois.
-    """
-
     def test_loja_apaga_o_proprio_curso(self, client, cab_loja, curso_da_loja, db):
         r = client.delete(f"/cursos/{curso_da_loja.id}", headers=cab_loja)
         assert r.status_code == 204

@@ -3,10 +3,6 @@ import '../Tema/app_tema.dart';
 import '../Services/ficha_service.dart';
 import 'tela_ficha_tecnica.dart';
 
-/// Controle de manutenções: a lista de fichas técnicas já preenchidas.
-///
-/// Estes clientes são de manutenção — não têm relação com os acessos
-/// cadastrados em "Acessos para clientes".
 class TelaManutencoes extends StatefulWidget {
   const TelaManutencoes({super.key});
 

@@ -1,10 +1,3 @@
-"""
-Testes de unidade do reconhecimento de CPF e CNPJ.
-
-É a regra que decide se quem está entrando é loja ou cliente, então erra
-aqui e o login inteiro erra junto.
-"""
-
 from app.core.documento import (
     documento_valido,
     formatar_documento,

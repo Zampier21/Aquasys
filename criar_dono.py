@@ -1,21 +1,3 @@
-"""
-Cria uma conta empresarial (CNPJ) — a conta de uma loja assinante.
-
-    python criar_dono.py "Minha Loja de Aquarismo" 12.345.678/0001-90 minhasenha
-
-O AquaSys é vendido às lojas como serviço, e **não há auto-cadastro**: a
-conta de cada assinante é criada aqui, no servidor, por quem administra o
-produto. É o ponto em que se confere que o assinante é mesmo uma empresa.
-
-Por isso **só aceita CNPJ**, com ou sem máscara. CPF é recusado: pessoa
-física entra no sistema como cliente de uma loja, nunca como assinante.
-
-A senha vira hash bcrypt; o texto puro não fica em lugar nenhum.
-
-Para criar CLIENTES não use este script — quem faz isso é a própria loja,
-pelo app, em Clientes → Acessos para clientes.
-"""
-
 from app.core.console import preparar
 
 preparar()
@@ -59,9 +41,6 @@ def main(argumentos: list) -> int:
         return 1
 
     tipo = tipo_documento(digitos)
-
-    # Assinante do AquaSys é empresa. Pessoa física entra no sistema
-    # como cliente de uma loja, e quem cria esse acesso é a própria loja.
     if tipo == "cpf":
         print(
             "Erro: conta de assinante exige CNPJ, e você informou um CPF.\n"

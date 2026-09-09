@@ -3,15 +3,6 @@ import 'package:http/http.dart' as http;
 import '../config.dart';
 import 'auth_service.dart';
 
-/// Cliente HTTP único do app.
-///
-/// Antes, cada serviço repetia o mesmo bloco: montar a URL, pegar o
-/// header, conferir o status, decodificar UTF-8, traduzir o erro e
-/// embrulhar tudo num try/catch. Eram trinta cópias em seis arquivos.
-///
-/// Todo método devolve sempre o mesmo formato:
-///   sucesso → `{'sucesso': true,  'dados': <json ou null>}`
-///   falha   → `{'sucesso': false, 'erro': '<mensagem para a tela>'}`
 class Api {
   static const String baseUrl = Config.apiUrl;
 

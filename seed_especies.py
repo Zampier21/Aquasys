@@ -1,21 +1,8 @@
-
 from app.core.console import preparar
 
 preparar()
 from app.database import SessionLocal
 from app.models.especie import Especie
-
-# ═══════════════════════════════════════════════════════════
-# VALORES ACEITOS
-#   tipo_agua      : doce | salobra | marinho
-#   comportamento  : pacifico | semi_agressivo | territorial | agressivo
-#   agrupamento    : cardume | par | harem | solitario
-#   nivel_natacao  : fundo | meio | superficie | todos
-#   alimentacao    : carnivoro | onivoro | herbivoro | limnivoro
-#   dificuldade    : facil | medio | dificil
-#   reef_safe      : sim | com_ressalva | nao   (apenas marinhos)
-# ═══════════════════════════════════════════════════════════
-
 ESPECIES = [
     {
         "nome_comum": "Neon Tetra",

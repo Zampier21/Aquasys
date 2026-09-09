@@ -1,15 +1,5 @@
 import 'package:flutter/services.dart';
 
-/// ═══════════════════════════════════════════════════════════
-/// CPF x CNPJ — detecção automática pela quantidade de dígitos
-///
-///   até 11 dígitos → CPF   999.999.999-99
-///   de 12 a 14     → CNPJ  99.999.999/0001-99
-///
-/// A máscara troca sozinha enquanto o usuário digita: ninguém
-/// precisa escolher o tipo antes.
-/// ═══════════════════════════════════════════════════════════
-
 enum TipoDocumento { cpf, cnpj, invalido }
 
 /// Remove pontos, barras, hífens e espaços.

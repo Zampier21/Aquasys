@@ -10,10 +10,7 @@ import 'tela_manutencoes.dart';
 import 'tela_clientes_manutencao.dart';
 import 'tela_cursos.dart';
 
-/// Aba 4 da barra inferior.
-///
-/// Para o acesso empresarial (CNPJ) é o menu de Clientes.
-/// Para o acesso do cliente (CPF) é a área de Cursos.
+
 class TelaClientes extends StatelessWidget {
   final String tipoUsuario;
   const TelaClientes({super.key, required this.tipoUsuario});
@@ -109,8 +106,6 @@ class TelaClientes extends StatelessWidget {
   }
 }
 
-/// Envelope com Scaffold para abrir a lista de cursos como página
-/// própria — no acesso do cliente ela é embutida na aba.
 class _PaginaCursos extends StatelessWidget {
   const _PaginaCursos();
 

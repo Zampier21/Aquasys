@@ -1,11 +1,3 @@
-"""
-Testes da ficha de manutenção.
-
-A regra central: o cliente de manutenção é cadastrado uma vez e
-reaproveitado. Na segunda visita, o que não for informado tem de vir
-do cadastro — é isso que evita redigitar tudo.
-"""
-
 CLIENTE = {
     "nome": "Seu João do Lago",
     "telefone": "(41) 99999-1234",

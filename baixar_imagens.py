@@ -1,23 +1,3 @@
-"""
-Popula o banco de imagens do catálogo de espécies.
-
-    python baixar_imagens.py                  # baixa o que ainda falta
-    python baixar_imagens.py --listar         # mostra o estado, sem baixar
-    python baixar_imagens.py --limite 10      # só as 10 primeiras sem foto
-    python baixar_imagens.py --especie "Betta"
-    python baixar_imagens.py --refazer        # rebaixa tudo, inclusive quem já tem
-    python baixar_imagens.py --especie "Acará Bandeira" --arquivo foto.jpg
-    python baixar_imagens.py --remover "Betta"
-
-As fotos vêm do Wikimedia Commons, sob licença Creative Commons ou
-domínio público, e o autor e a licença são gravados junto — é o que
-essas licenças exigem, e é o que permite usar as imagens num produto
-comercial.
-
-Seguro de rodar de novo: espécie que já tem foto é pulada, a não ser
-com `--refazer`.
-"""
-
 import argparse
 import sys
 from pathlib import Path

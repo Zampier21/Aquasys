@@ -4,14 +4,6 @@ import '../Services/auth_service.dart';
 import '../Services/curso_service.dart';
 import 'tela_curso_detalhe.dart';
 
-/// Lista de cursos.
-///
-/// Publicar curso é coisa da conta empresarial. O acesso do cliente
-/// (CPF) só assiste o que a loja dele disponibilizou.
-///
-/// Quem decide isso é o tipo do usuário logado, lido aqui dentro — e não
-/// um parâmetro de quem constrói a tela. Assim não existe caminho, nem
-/// por engano, em que a área do cliente mostre botão de publicar.
 class TelaCursos extends StatefulWidget {
   const TelaCursos({super.key});
 
@@ -25,11 +17,6 @@ class _TelaCursosState extends State<TelaCursos> {
   bool _podeGerenciar = false;
   String? _erro;
 
-  /// Ids marcados no modo de seleção. Vazio = modo normal.
-  ///
-  /// Só entram cursos da própria loja: curso global é conteúdo do
-  /// AquaSys e a API recusa a exclusão, então nem deixamos marcar —
-  /// melhor não oferecer do que oferecer e falhar.
   final Set<String> _selecionados = {};
   bool _excluindo = false;
 
@@ -84,11 +71,6 @@ class _TelaCursosState extends State<TelaCursos> {
   Future<void> _excluirSelecionados() =>
       _confirmarEExcluir(_selecionados.toList());
 
-  /// Exclui um curso sozinho, sem entrar no modo de seleção.
-  ///
-  /// Separado de propósito: se o botão da lixeira marcasse o card para
-  /// depois excluir, cancelar o aviso deixaria a tela presa em seleção
-  /// com um item marcado que o usuário nunca pediu para marcar.
   Future<void> _excluirUm(Map<String, dynamic> curso) =>
       _confirmarEExcluir([curso['id'].toString()]);
 
@@ -174,9 +156,6 @@ class _TelaCursosState extends State<TelaCursos> {
 
     setState(() => _excluindo = true);
 
-    // Um por vez, guardando quem falhou: se o quinto der erro, os quatro
-    // primeiros já foram — dizer "erro ao excluir" e nada mais deixaria
-    // a lista e a tela em desacordo.
     final falharam = <String>[];
     for (final id in ids) {
       final resposta = await CursoService.excluir(id);
@@ -206,8 +185,6 @@ class _TelaCursosState extends State<TelaCursos> {
   }
 
   Future<void> _abrir(Map<String, dynamic> curso) async {
-    // Com a seleção aberta, o toque marca em vez de navegar — é o que
-    // se espera depois de já ter segurado um item.
     if (_selecionando) {
       _alternar(curso);
       return;
@@ -218,8 +195,7 @@ class _TelaCursosState extends State<TelaCursos> {
       MaterialPageRoute(
         builder: (_) => TelaCursoDetalhe(
           cursoId: curso['id'],
-          // Curso global é conteúdo do AquaSys: a loja também não edita.
-          // Curso global é conteúdo do AquaSys: nem a loja edita.
+
           podeEditar: _podeGerenciar && curso['curso_global'] == false,
         ),
       ),
@@ -229,9 +205,7 @@ class _TelaCursosState extends State<TelaCursos> {
 
   @override
   Widget build(BuildContext context) {
-    // Com itens marcados, o botão voltar do Android desfaz a seleção em
-    // vez de sair da tela — é o comportamento de qualquer app que tem
-    // seleção múltipla, e evita perder o que já foi marcado sem querer.
+
     return PopScope(
       canPop: !_selecionando,
       onPopInvokedWithResult: (saiu, _) {
@@ -327,8 +301,6 @@ class _TelaCursosState extends State<TelaCursos> {
                 )
               : null,
         ),
-        // Segurar para selecionar não é descobrível sozinho; a linha
-        // aparece só quando existe curso da loja para excluir.
         if (_podeGerenciar && _cursos.any(_podeExcluir)) ...[
           const SizedBox(height: 6),
           Row(

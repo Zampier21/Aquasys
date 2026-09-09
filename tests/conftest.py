@@ -1,14 +1,3 @@
-"""
-Preparação comum dos testes da API.
-
-Os testes rodam contra um banco PostgreSQL **separado**, criado do zero a
-cada execução e derrubado no fim: o banco de desenvolvimento nunca é
-tocado. O nome sai de `DATABASE_URL` com o sufixo `_test`.
-
-Cada teste roda numa transação própria, desfeita ao final, então um teste
-nunca enxerga o que o outro gravou.
-"""
-
 import re
 
 import pytest
@@ -19,8 +8,6 @@ from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 from app.core.security import hash_senha
 from app.database import Base, get_db
-# Importado com outro nome: `import app.models` abaixo reatribuiria
-# `app` para o pacote e esconderia a instância do FastAPI.
 from app.main import app as api
 from app.models.usuario import Usuario
 

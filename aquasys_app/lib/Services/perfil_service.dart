@@ -2,10 +2,7 @@ import 'api.dart';
 import 'auth_service.dart';
 
 /// Perfil da conta logada — o que a tela de Configurações edita.
-///
-/// Toda alteração que muda o que o cabeçalho mostra (nome e foto) também
-/// atualiza a cópia local, senão a tela salvava com sucesso e o topo
-/// continuava exibindo o valor antigo até o próximo login.
+
 class PerfilService {
   static Future<Map<String, dynamic>> carregar() => Api.get('/perfil/');
 

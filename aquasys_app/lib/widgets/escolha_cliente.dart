@@ -3,10 +3,6 @@ import '../Tema/app_tema.dart';
 import '../Services/ficha_service.dart';
 
 /// Escolha do cliente da visita, aberta de dentro da ficha.
-///
-/// Lista quem a loja já atende e deixa cadastrar um novo sem sair da
-/// ficha — que é como o primeiro atendimento acontece. Da segunda visita
-/// em diante, é só escolher da lista.
 class EscolhaCliente extends StatefulWidget {
   final void Function(Map<String, dynamic>) aoEscolher;
   const EscolhaCliente({super.key, required this.aoEscolher});
@@ -207,10 +203,6 @@ class _EscolhaClienteState extends State<EscolhaCliente> {
 }
 
 /// Formulário do cliente de manutenção.
-///
-/// Serve aos dois caminhos: cadastrar de dentro da ficha (primeira
-/// visita) e editar pela tela de gestão. Com `cliente` preenchido,
-/// abre em modo de edição.
 class FormularioClienteManutencao extends StatefulWidget {
   final Map<String, dynamic>? cliente;
   final void Function(Map<String, dynamic>) aoSalvar;

@@ -33,12 +33,6 @@ class FichaService {
   static Future<Map<String, dynamic>> excluir(String id) =>
       Api.delete('/fichas/$id');
 
-  // ═══════════════════════════════════════════════════
-  // CLIENTES DE MANUTENÇÃO
-  //
-  // Quem a loja visita em casa. Cadastro leve, sem login: existe para
-  // o técnico não redigitar contato e dados do aquário a cada visita.
-  // ═══════════════════════════════════════════════════
   static Future<Map<String, dynamic>> listarClientes({String? busca}) =>
       Api.get('/fichas/clientes', query: {'busca': busca});
 

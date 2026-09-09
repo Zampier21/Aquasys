@@ -1,22 +1,3 @@
-"""
-Prepara o banco: cria as tabelas que faltam e aplica as migrações pendentes.
-
-    python criar_tabelas.py
-
-Seguro de rodar várias vezes — e essa é a razão de existir a tabela de
-controle `_migracao`: uma migração antiga pode mencionar algo que uma
-migração posterior removeu (a 001 fala da tabela `cliente`, que a 004
-apagou). Reexecutar tudo do zero quebraria. Cada arquivo roda uma vez só.
-
-Banco novo, do zero:
-  `create_all` já monta o esquema atual a partir dos modelos, então as
-  migrações são apenas marcadas como aplicadas — elas descrevem o caminho
-  até aqui, não o destino.
-
-Banco que já existia:
-  roda só os arquivos de `sql/` que ainda não foram registrados.
-"""
-
 from app.core.console import preparar
 
 preparar()

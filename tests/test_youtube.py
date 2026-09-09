@@ -1,11 +1,3 @@
-"""
-Testes de unidade da integração com o YouTube.
-
-Só as funções puras — extrair id de URL e reconhecer playlist. O que
-depende de rede (oEmbed e feed) não é testado aqui: teste de unidade que
-sai para a internet falha por motivo errado quando a conexão cai.
-"""
-
 import pytest
 
 from app.services.youtube import extrair_id, extrair_playlist_id

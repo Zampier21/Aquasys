@@ -6,16 +6,6 @@ import '../Tema/app_tema.dart';
 import '../config.dart';
 
 /// Foto de uma espécie, servida pela API.
-///
-/// As fotos não vão dentro do aplicativo. Empacotá-las engordaria o APK
-/// sem limite — são muitas espécies — e cada peixe novo exigiria publicar
-/// uma versão nova na loja. Assim a foto entra pelo banco e aparece no
-/// celular na mesma hora.
-///
-/// `caminho` é o que a API mandou (`/peixes/<id>/imagem`), ou nulo quando
-/// aquela espécie ainda não tem foto. Nulo, erro de rede e imagem
-/// corrompida caem todos no mesmo lugar: o ícone de peixe colorido que a
-/// tela já usava antes de existir foto nenhuma.
 class FotoEspecie extends StatelessWidget {
   final String? caminho;
   final Color cor;

@@ -1,11 +1,3 @@
-"""
-Testes de unidade das faixas ideais de água.
-
-Esta é a regra que mais errou no projeto: por um tempo o app tinha uma
-cópia dela que não sabia o tipo do aquário, e um marinho saudável a pH 8
-aparecia como problema. Os testes abaixo prendem esse comportamento.
-"""
-
 import pytest
 
 from app.services import parametros
@@ -147,13 +139,6 @@ class EspecieFalsa:
 
 
 class TestFaixaSegueOsPeixes:
-    """
-    O tipo do aquário é só o palpite inicial: quem manda são os peixes.
-
-    Foi o erro relatado no teste em celular — um "comunitário" povoado
-    com peixes de água alcalina aparecia com pH acima do ideal.
-    """
-
     ALCALINOS = [
         EspecieFalsa("Molinésia", ph=(7.0, 8.5)),
         EspecieFalsa("Platy", ph=(7.0, 8.3)),

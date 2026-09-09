@@ -3,16 +3,9 @@ import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../Tema/app_tema.dart';
 import '../Services/curso_service.dart';
 
-/// Um curso aberto: o player em cima, a lista de aulas embaixo.
-///
-/// O vídeo toca pelo player oficial do YouTube (IFrame Player API) —
-/// nada é baixado nem reencaminhado, que é o exigido pelos Termos de
-/// Serviço deles.
 class TelaCursoDetalhe extends StatefulWidget {
   final String cursoId;
 
-  /// Loja dona do curso: pode adicionar e remover aulas.
-  /// Curso global do AquaSys nunca é editável.
   final bool podeEditar;
 
   const TelaCursoDetalhe({
@@ -67,16 +60,12 @@ class _TelaCursoDetalheState extends State<TelaCursoDetalhe> {
 
     if (_curso == null) return;
 
-    // Reabre a mesma aula depois de recarregar; se ela sumiu (removida),
-    // cai para a primeira.
     final aulas = _aulas;
     if (aulas.isEmpty) {
       setState(() => _aulaAtual = null);
       return;
     }
 
-    // Parênteses obrigatórios: sem eles o Dart confunde o `?` do
-    // ternário com o `?[` do acesso nulo.
     final id = manterAula ? (_aulaAtual?['id']) : null;
     final escolhida = aulas.firstWhere(
       (a) => a['id'] == id,
@@ -98,8 +87,6 @@ class _TelaCursoDetalheState extends State<TelaCursoDetalhe> {
         videoId: videoId,
         params: const YoutubePlayerParams(
           showFullscreenButton: true,
-          // Sem isso o YouTube sugere vídeo de qualquer canal ao terminar,
-          // o que tira o usuário do contexto do curso.
           strictRelatedVideos: true,
         ),
       );
@@ -113,7 +100,6 @@ class _TelaCursoDetalheState extends State<TelaCursoDetalhe> {
   Future<void> _alternarConcluida(Map<String, dynamic> aula) async {
     final novo = !(aula['concluida'] == true);
 
-    // Atualiza na hora; se a API recusar, o reload devolve a verdade.
     setState(() => aula['concluida'] = novo);
 
     final resultado =
@@ -178,7 +164,6 @@ class _TelaCursoDetalheState extends State<TelaCursoDetalhe> {
       );
     }
 
-    // Sem player ainda (curso vazio): layout simples, sem o scaffold do vídeo.
     if (_player == null) {
       return Scaffold(
         backgroundColor: AppTheme.backgroundApp,
@@ -187,8 +172,6 @@ class _TelaCursoDetalheState extends State<TelaCursoDetalhe> {
       );
     }
 
-    // O próprio YoutubePlayer cuida da tela cheia desde a versão 22 —
-    // o scaffold que embrulhava isso virou obsoleto.
     return Scaffold(
       backgroundColor: AppTheme.backgroundApp,
       appBar: _appBar(),
@@ -504,10 +487,6 @@ class _TelaCursoDetalheState extends State<TelaCursoDetalhe> {
         ),
       );
 
-  /// Diálogo de "cole um link do YouTube".
-  ///
-  /// Serve ao vídeo avulso e à playlist: muda o texto e para onde o link
-  /// vai, o resto do comportamento é o mesmo.
   void _abrirDialogoLink({
     required String titulo,
     required String ajuda,

@@ -3,13 +3,7 @@ import '../Tema/app_tema.dart';
 import '../Services/ficha_service.dart';
 import '../widgets/escolha_cliente.dart';
 
-/// Ficha técnica de atendimento.
-///
-/// O nome do cliente é digitado à mão: a ficha atende quem contrata
-/// manutenção, que nem sempre tem acesso ao app. Por isso ela não puxa
-/// nada da tela de "Acessos para clientes".
 class TelaFichaTecnica extends StatefulWidget {
-  /// Quando vem preenchido, abre a ficha existente para edição.
   final String? fichaId;
 
   const TelaFichaTecnica({super.key, this.fichaId});
@@ -26,10 +20,6 @@ class _Equipamento {
   _Equipamento(this.nome, {this.presente = false});
 }
 
-/// Teste de água.
-///
-/// `codigo` é o que vai para o banco ("pH", "TDS"); `rotulo` é o texto
-/// longo que aparece na tela.
 class _Teste {
   final String codigo;
   final String rotulo;
@@ -168,8 +158,6 @@ class _TelaFichaTecnicaState extends State<TelaFichaTecnica>
     _mesclarTestes(ficha['testes']);
   }
 
-  /// Marca no catálogo o que a ficha já tinha e acrescenta
-  /// os itens personalizados que o técnico adicionou.
   void _mesclarEquipamentos(dynamic salvos) {
     if (salvos is! List) return;
     final porNome = {for (final e in _equipamentos) e.nome: e};
@@ -635,14 +623,6 @@ class _TelaFichaTecnicaState extends State<TelaFichaTecnica>
     );
   }
 
-  // ═══════════════════════════════════════════════════
-  // CLIENTE DA VISITA
-  // ═══════════════════════════════════════════════════
-  /// Campo do cliente: abre a lista do cadastro em vez de digitar.
-  ///
-  /// Escolher um cliente traz junto o que não muda entre visitas —
-  /// tipo de instalação, litros e tipo de água —, que é o ponto do
-  /// cadastro existir.
   Widget _seletorCliente() {
     final escolhido = _cliente != null;
 

@@ -1,16 +1,3 @@
-"""
-Isolamento entre contas — o teste mais importante do projeto.
-
-O sistema é multiempresa: várias lojas dividem o mesmo banco. Se uma
-conseguir ler dado de outra trocando um id na URL, o produto não pode ser
-vendido. Cada rota busca filtrando pelo dono antes de responder, e é isso
-que os testes abaixo prendem.
-
-Cada caso segue o mesmo roteiro: a Loja A cria algo, a Loja B tenta
-alcançar aquele id, e a resposta tem de ser 404 (não 403 — nem a
-existência do recurso é revelada).
-"""
-
 AQUARIO = {
     "nome": "Aquário da Loja A",
     "volume_litros": 100,

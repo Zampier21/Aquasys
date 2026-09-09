@@ -1,11 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// ═══════════════════════════════════════════════════════════
-/// TOKENS DE COR — fonte única da identidade visual do AquaSys
-///
-/// Todas as telas leem daqui. Para acertar uma cor no app
-/// inteiro, altere apenas o valor do token correspondente.
-/// ═══════════════════════════════════════════════════════════
 class AppTheme {
   // ─── Superfícies ──────────────────────────────────
   /// Fundo geral das telas.

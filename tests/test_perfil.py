@@ -1,18 +1,8 @@
-"""
-Testes do perfil — a tela de Configurações.
-
-Duas coisas importam aqui e são testadas com insistência: ninguém alcança
-a conta de outra pessoa (todas as rotas agem só sobre o token), e trocar
-senha exige a senha atual mesmo com token válido.
-"""
-
 import base64
 
 
 from app.core.security import verificar_senha
 
-# 1x1 pixel, o menor PNG válido que existe — serve para testar o caminho
-# feliz sem carregar arquivo nenhum.
 PNG_MINIMO = base64.b64encode(
     bytes.fromhex(
         "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"

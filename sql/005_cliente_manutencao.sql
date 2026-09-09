@@ -1,22 +1,3 @@
--- ═══════════════════════════════════════════════════════════
--- 005 — Cadastro leve do cliente de manutenção
---
--- A ficha atende quem a loja visita em casa, que não é a mesma
--- lista de quem tem acesso ao app. Até aqui o nome era texto
--- livre e nada se reaproveitava: na terceira visita ao mesmo
--- cliente, o técnico redigitava tudo.
---
--- Agora o contato é gravado uma vez e reutilizado. O que muda a
--- cada visita continua na ficha; o que é do cliente (contato e
--- descrição da instalação) fica aqui.
---
--- Isto NÃO é a antiga tabela `cliente`, removida na 004: aquela
--- guardava senha e dava acesso ao aplicativo. Esta é só agenda de
--- quem recebe manutenção — sem login, sem senha.
---
--- Seguro de rodar mais de uma vez.
--- ═══════════════════════════════════════════════════════════
-
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS cliente_manutencao (
@@ -42,8 +23,6 @@ CREATE TABLE IF NOT EXISTS cliente_manutencao (
     CONSTRAINT chk_volume_manutencao CHECK (volume_litros IS NULL OR volume_litros > 0)
 );
 
--- Dois clientes de lojas diferentes podem ter o mesmo nome; dentro
--- da mesma loja, não — é o que evita duplicar o cadastro sem querer.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_cliente_manutencao_nome
     ON cliente_manutencao (dono_id, lower(nome));
 
@@ -55,8 +34,5 @@ ALTER TABLE ficha_manutencao
 CREATE INDEX IF NOT EXISTS idx_ficha_cliente
     ON ficha_manutencao (cliente_id);
 
--- `nome_cliente` continua na ficha de propósito: é o retrato do nome
--- no dia do atendimento. Cliente renomeado depois não reescreve a
--- história das fichas antigas.
 
 COMMIT;

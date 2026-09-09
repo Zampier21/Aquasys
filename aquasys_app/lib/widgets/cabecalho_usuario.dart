@@ -4,12 +4,6 @@ import '../Services/auth_service.dart';
 import '../Telas/tela_configuracoes.dart';
 
 /// Cabeçalho comum a todas as telas internas:
-/// foto (ou logo) + saudação + engrenagem que abre as Configurações.
-///
-/// Nome e foto vêm da cópia local gravada no login e atualizada pela tela
-/// de Configurações — não de uma requisição. O cabeçalho aparece em toda
-/// tela do app; buscar isso na rede a cada abertura seria uma chamada por
-/// navegação para um dado que quase nunca muda.
 class CabecalhoUsuario extends StatefulWidget {
   final String tipoUsuario;
   const CabecalhoUsuario({super.key, required this.tipoUsuario});

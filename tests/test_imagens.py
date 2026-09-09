@@ -1,16 +1,3 @@
-"""
-Testes do banco de imagens das espécies.
-
-A parte que importa aqui é o preparo da foto: é ele que decide o peso do
-que trafega para o celular do cliente. E a rota, que precisa devolver a
-imagem com cache — sem isso a lista de peixes rebaixaria tudo a cada
-rolagem.
-
-O que fala com a internet não é testado: teste que sai para a rede falha
-por motivo errado quando a conexão cai, e o Wikimedia ainda limita quem
-insiste.
-"""
-
 import io
 
 import pytest
@@ -123,13 +110,6 @@ class TestPreparar:
 
 
 class TestReconheceImagem:
-    """
-    O bug real: a URL do Commons vem com rastreio pendurado
-    (`...jpg?utm_source=...`), e comparar a string inteira reprovava toda
-    foto. Oito espécies voltaram "sem resultado" com a imagem certa e a
-    licença certa do outro lado.
-    """
-
     @pytest.mark.parametrize("url", [
         "https://upload.wikimedia.org/x/Betta.jpg",
         "https://upload.wikimedia.org/x/Betta.jpg?utm_source=commons&utm_content=original",

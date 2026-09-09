@@ -3,16 +3,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
-/// Lembretes diários dos alertas de aquário, no próprio aparelho.
-///
-/// A camada é **agnóstica de origem**: ela recebe uma lista de alertas
-/// já prontos e agenda. Não sabe (nem precisa saber) se vieram da API ou
-/// de um banco local — é isso que faz o dia do modo offline não mexer
-/// aqui dentro.
-///
-/// O agendamento é diário e se repete enquanto o alerta existir. Some
-/// quando o parâmetro é corrigido ou o aviso é dispensado, porque a
-/// sincronização apaga o que não veio na lista nova.
 class NotificacaoService {
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -38,14 +28,11 @@ class NotificacaoService {
   static Future<void> iniciar() async {
     if (_iniciado) return;
 
-    // Notificação agendada precisa de fuso horário: sem isso, "9h" não
-    // tem significado. O pacote timezone não lê o fuso do sistema
-    // sozinho, então usamos o horário local do aparelho.
+
     tzdata.initializeTimeZones();
 
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    // As permissões do iOS são pedidas em `pedirPermissao`, no momento
-    // certo — não no primeiro segundo do app.
+
     const ios = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
@@ -67,10 +54,7 @@ class NotificacaoService {
   // PERMISSÃO
   // ═══════════════════════════════════════════════════
   /// Pede autorização para notificar.
-  ///
-  /// No Android 13+ isso abre o diálogo de POST_NOTIFICATIONS; em versões
-  /// anteriores a permissão já vem concedida. No iOS abre o diálogo do
-  /// sistema. Chame quando existir algo a notificar, não na abertura.
+
   static Future<bool> pedirPermissao() async {
     await iniciar();
 
@@ -94,13 +78,7 @@ class NotificacaoService {
   // SINCRONIZAÇÃO
   // ═══════════════════════════════════════════════════
   /// Reflete no aparelho exatamente a lista de alertas recebida.
-  ///
-  /// Cada item precisa de `id`, `aquario` e `mensagem`; `aquario_id` é
-  /// opcional e serve para o toque abrir o aquário certo.
-  ///
-  /// Cancela tudo antes de reagendar: assim alerta resolvido some sem
-  /// precisar rastrear o que mudou. São poucas notificações, o custo é
-  /// irrelevante perto da simplicidade.
+
   static Future<void> sincronizar(List<dynamic> alertas) async {
     await iniciar();
     await _plugin.cancelAll();
@@ -158,11 +136,7 @@ class NotificacaoService {
   // AUXILIARES
   // ═══════════════════════════════════════════════════
   /// Próxima ocorrência do horário do lembrete. Se já passou das 9h
-  /// hoje, agenda para amanhã — senão o primeiro disparo só viria no
-  /// dia seguinte por acaso.
-  ///
-  /// Recebe o "agora" em vez de consultar o relógio para poder ser
-  /// testada sem depender da hora em que o teste roda.
+
   @visibleForTesting
   static tz.TZDateTime proximoLembrete(tz.TZDateTime agora) {
     var quando = tz.TZDateTime(
