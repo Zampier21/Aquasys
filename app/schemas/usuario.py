@@ -70,3 +70,20 @@ class ClienteResponse(BaseModel):
     email: Optional[str] = None
     ativo: bool
     criado_em: datetime
+
+
+# ─── Saída: plano da loja e consumo de acessos ───────────
+class PlanoResponse(BaseModel):
+    """Quanto da assinatura já está em uso.
+
+    O aplicativo mostra isto na tela de acessos, para que a loja veja o
+    teto antes de esbarrar nele — e não depois, com um erro na cara.
+    """
+
+    plano: str
+    rotulo: str
+    ativos: int
+    # Nulo quando o plano não tem teto.
+    limite: Optional[int] = None
+    restantes: Optional[int] = None
+    ilimitado: bool

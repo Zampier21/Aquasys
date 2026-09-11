@@ -12,8 +12,10 @@ from app.services import imagens as svc
 
 
 def _especies(db, filtro: str | None, refazer: bool, limite: int | None):
-    """Espécies a processar, na ordem do nome."""
-    consulta = db.query(Especie).filter(Especie.ativo.is_(True))
+    consulta = db.query(Especie).filter(
+        Especie.ativo.is_(True),
+        Especie.variante_de_id.is_(None),
+    )
 
     if filtro:
         consulta = consulta.filter(Especie.nome_comum.ilike(f"%{filtro}%"))
@@ -135,6 +137,12 @@ def de_arquivo(db, filtro: str, caminho: Path) -> int:
         .filter(Especie.ativo.is_(True), Especie.nome_comum.ilike(f"%{filtro}%"))
         .all()
     )
+    # O nome exato vence a busca parcial. Com variedades, "Acará Bandeira"
+    # casa com a base e com cada variedade dela, e a exigência de um único
+    # resultado impediria justamente de trocar a foto da base.
+    exatas = [e for e in especies if (e.nome_comum or "").lower() == filtro.lower()]
+    if len(exatas) == 1:
+        especies = exatas
     if len(especies) != 1:
         # Gravar a foto errada em massa é pior do que não gravar nada.
         print(

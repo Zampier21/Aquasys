@@ -1,9 +1,43 @@
 -- =====================================================================
 -- AquaSys — esquema do banco de dados
+--
+-- As 18 tabelas como os MODELOS as declaram, compiladas para o dialeto
+-- do PostgreSQL a partir de app/models/.
+--
+-- ATENÇÃO: ISTO AINDA NÃO É O ESQUEMA COMPLETO DO BANCO REAL
+--   O banco AquaSys foi montado originalmente por um SQL escrito à mão, e
+--   os modelos o espelham só em parte. Comparados em 10/09/2026, o banco
+--   real tinha 17 índices e cerca de 30 restrições CHECK e UNIQUE que não
+--   estão aqui. Para o esquema exato de produção, use:
+--       pg_dump --schema-only
+--   Este arquivo passa a ser completo quando essas regras forem
+--   declaradas nos modelos.
+--
+-- COMO USAR
+--   Este arquivo é documentação: serve para ler o esquema, revisá-lo e
+--   anexá-lo ao trabalho. Quem cria o banco de verdade é
+--
+--       python criar_tabelas.py
+--
+--   que monta as tabelas pelos modelos e registra as migrações na
+--   tabela de controle `_migracao`. Rodar este arquivo à mão num banco
+--   que já existe vai falhar, porque as tabelas já estarão lá.
+--
+--   Ele fica fora de sql/ justamente por isso: criar_tabelas.py executa
+--   todo sql/*.sql ainda não registrado, e um CREATE TABLE ali dentro
+--   quebraria a preparação de um banco existente.
+--
+-- ORDEM
+--   As tabelas aparecem em ordem de dependência: nenhuma chave
+--   estrangeira aponta para tabela que ainda não exista.
+-- =====================================================================
+
 BEGIN;
+
 
 -- ---------------------------------------------------------------------
 -- especie
+--   depende de: especie
 -- ---------------------------------------------------------------------
 CREATE TABLE especie (
 	id UUID NOT NULL, 
@@ -38,8 +72,12 @@ CREATE TABLE especie (
 	observacoes TEXT, 
 	ativo BOOLEAN NOT NULL, 
 	criado_em TIMESTAMP WITHOUT TIME ZONE DEFAULT now() NOT NULL, 
-	PRIMARY KEY (id)
+	variante_de_id UUID, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(variante_de_id) REFERENCES especie (id) ON DELETE CASCADE
 );
+CREATE UNIQUE INDEX idx_especie_cientifico ON especie (lower(nome_cientifico)) WHERE variante_de_id IS NULL;
+CREATE INDEX idx_especie_variante_de ON especie (variante_de_id);
 
 -- ---------------------------------------------------------------------
 -- usuario
@@ -52,6 +90,7 @@ CREATE TABLE usuario (
 	senha_hash VARCHAR(255) NOT NULL, 
 	tipo VARCHAR(10) NOT NULL, 
 	dono_id UUID, 
+	plano VARCHAR(20), 
 	email VARCHAR(150), 
 	avatar TEXT, 
 	ativo BOOLEAN NOT NULL, 
@@ -59,6 +98,7 @@ CREATE TABLE usuario (
 	atualizado_em TIMESTAMP WITHOUT TIME ZONE, 
 	PRIMARY KEY (id), 
 	CONSTRAINT chk_tipo CHECK (tipo IN ('dono', 'cliente')), 
+	CONSTRAINT chk_plano CHECK (plano IS NULL OR plano IN ('basico', 'profissional', 'ilimitado')), 
 	UNIQUE (cpf_cnpj), 
 	FOREIGN KEY(dono_id) REFERENCES usuario (id)
 );

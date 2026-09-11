@@ -251,6 +251,21 @@ def avaliar_par(a, b, excecao: Optional[dict] = None) -> Resultado:
 # ═══════════════════════════════════════════════════════════
 # ANÁLISE COMPLETA DE UMA ADIÇÃO
 # ═══════════════════════════════════════════════════════════
+def _raiz(especie):
+    """A espécie-base, ou a própria espécie quando ela não é variedade."""
+    return getattr(especie, "variante_de_id", None) or especie.id
+
+
+def _mesma_especie(a, b) -> bool:
+    """Se dois itens do catálogo são o mesmo animal.
+
+    São quando têm a mesma raiz: duas variedades da mesma base, ou a base
+    e uma variedade dela. Duas linhas diferentes do catálogo podem ser o
+    mesmo peixe — é para isso que as variedades existem.
+    """
+    return _raiz(a) == _raiz(b)
+
+
 def avaliar_adicao(
     nova,
     quantidade: int,
@@ -275,12 +290,28 @@ def avaliar_adicao(
                 f"{nova.cardume_minimo} indivíduos",
             )
 
-    # Agressividade entre indivíduos da mesma espécie
-    if nova.agressivo_coespecificos and quantidade > 1:
-        resultado.adicionar(
-            Nivel.FATAL, "agressao",
-            f"{nova.nome_comum} não convive com outros da mesma espécie",
-        )
+    # Agressividade entre indivíduos da mesma espécie.
+    #
+    # Contam também os que JÁ estão no aquário e são da mesma espécie-base.
+    # Antes das variedades bastava olhar `quantidade`: um segundo Betta
+    # caía em "edite a quantidade", porque era a mesma linha do catálogo.
+    # Betta Halfmoon e Betta Crowntail são linhas diferentes e o mesmo
+    # animal — e dois machos iriam para o mesmo aquário sem aviso.
+    ja_presentes = [(e, q) for e, q in habitantes if _mesma_especie(nova, e)]
+    total = quantidade + sum(q for _, q in ja_presentes)
+    briga = nova.agressivo_coespecificos or any(
+        e.agressivo_coespecificos for e, _ in ja_presentes
+    )
+    if briga and total > 1:
+        if ja_presentes:
+            nomes = ", ".join(e.nome_comum for e, _ in ja_presentes)
+            mensagem = (
+                f"{nova.nome_comum} não convive com outros da mesma espécie, "
+                f"e o aquário já tem {nomes}"
+            )
+        else:
+            mensagem = f"{nova.nome_comum} não convive com outros da mesma espécie"
+        resultado.adicionar(Nivel.FATAL, "agressao", mensagem)
 
     # Confronto com cada habitante
     for especie, _qtd in habitantes:

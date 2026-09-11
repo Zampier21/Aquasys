@@ -46,6 +46,25 @@ class EspecieBase(BaseModel):
 
 class EspecieCreate(EspecieBase):
     pass
+class VariedadeResumo(BaseModel):
+    """Uma variedade dentro do card da espécie-base.
+
+    Leva só identidade e foto: a biologia é a mesma da base, e repeti-la
+    aqui faria a resposta do catálogo crescer sem informar nada novo.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    # Nome completo, para busca e para o título da ficha.
+    nome_comum: str
+    # Nome sem repetir o da base: "Leopardo Azul" dentro de "Acará Bandeira".
+    nome_curto: str
+    imagem: Optional[str] = None
+    imagem_miniatura: Optional[str] = None
+    imagem_credito: Optional[str] = None
+
+
 class EspecieResponse(EspecieBase):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
@@ -54,6 +73,9 @@ class EspecieResponse(EspecieBase):
     imagem: Optional[str] = None
     imagem_miniatura: Optional[str] = None
     imagem_credito: Optional[str] = None
+    # Variedades desta espécie. Vazia na maioria delas; o catálogo lista
+    # apenas as bases, e as variedades aparecem ao abrir o card.
+    variedades: List[VariedadeResumo] = []
 
 
 # ═══════════════════════════════════════════════════════

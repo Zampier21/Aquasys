@@ -43,7 +43,17 @@ class _AberturaState extends State<_Abertura> {
   }
 
   Future<void> _decidir() async {
-    await NotificacaoService.iniciar();
+    // Notificação local só existe em Android e iOS. Rodando em Chrome ou
+    // no Windows — o que acontece ao demonstrar o sistema sem o celular
+    // por perto — o plugin não responde e a chamada lança. Sem esta
+    // proteção a exceção interrompia `_decidir` na primeira linha, e o
+    // aplicativo ficava parado na tela de abertura, sem nunca decidir
+    // entre login e tela inicial. O alerta é acessório; o acesso, não.
+    try {
+      await NotificacaoService.iniciar();
+    } catch (_) {
+      // segue sem notificação local
+    }
 
     // Tocar no lembrete abre a lista de aquários, onde o parâmetro
     // problemático pode ser corrigido.

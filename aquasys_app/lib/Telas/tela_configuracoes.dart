@@ -477,11 +477,18 @@ class _TelaConfiguracoesState extends State<TelaConfiguracoes> {
   }
 
   Widget _grupo(List<Widget> linhas) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.white,
+    // Material, e não Container com decoração: o ListTile pinta o próprio
+    // fundo e a ondulação do toque no Material mais próximo acima dele.
+    // Com um Container colorido no meio do caminho, a decoração fica na
+    // frente e esconde o efeito — o framework avisa disso em modo de
+    // depuração. O `shape` desenha a mesma moldura arredondada com a
+    // mesma borda, então a aparência não muda; o que muda é que a
+    // superfície que recebe o toque passa a ser visível.
+    return Material(
+      color: AppTheme.white,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.bordaCard),
+        side: const BorderSide(color: AppTheme.bordaCard),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(

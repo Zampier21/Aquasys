@@ -34,6 +34,12 @@ def engine():
         con.execute(text(f'CREATE DATABASE "{NOME_TESTE}"'))
 
     motor = create_engine(URL_TESTE)
+    # A busca do catálogo compara sem acento, por unaccent(). A extensão
+    # existe no banco de produção; num banco recém-criado, não. Sem ela o
+    # teste de busca falharia por causa do ambiente, e não do código.
+    with motor.connect() as con:
+        con.execute(text("CREATE EXTENSION IF NOT EXISTS unaccent"))
+        con.commit()
     Base.metadata.create_all(bind=motor)
 
     yield motor

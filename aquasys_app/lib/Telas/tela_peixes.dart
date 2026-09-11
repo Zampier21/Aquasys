@@ -42,6 +42,10 @@ class _TelaPeixesState extends State<TelaPeixes> {
   List<Map<String, dynamic>> _habitantes = [];
 
   final Set<String> _abertos = {};
+
+  /// Variedade escolhida em cada card, pelo id da base. Ausente = a
+  /// própria base. É o que o card mostra e o que o botão adiciona.
+  final Map<String, String> _variedadeEscolhida = {};
   bool _carregando = true;
   bool _habitantesAbertos = true;
   String? _erro;
@@ -84,6 +88,7 @@ class _TelaPeixesState extends State<TelaPeixes> {
 
       if (respEspecies['sucesso'] == true) {
         _especies = Api.lista(respEspecies);
+        _escolherPelaBusca();
       } else {
         _erro = respEspecies['erro'];
       }
@@ -173,6 +178,79 @@ class _TelaPeixesState extends State<TelaPeixes> {
 
   bool _jaEstaNoAquario(String especieId) =>
       _habitantes.any((h) => h['especie_id'].toString() == especieId);
+
+  // ─── Variedades ─────────────────────────────────────────
+  List<Map<String, dynamic>> _variedadesDe(Map<String, dynamic> e) =>
+      List<Map<String, dynamic>>.from(e['variedades'] ?? const []);
+
+  /// Se a base ou qualquer variedade dela já vive no aquário.
+  ///
+  /// É o que acende o check do cabeçalho: um Halfmoon no aquário é um
+  /// Betta no aquário. O botão, por outro lado, olha só a variedade
+  /// escolhida — ter um Halfmoon não impede de escolher o Plakat; quem
+  /// decide se ele cabe é a análise do servidor.
+  bool _familiaNoAquario(Map<String, dynamic> e) =>
+      _jaEstaNoAquario(e['id'].toString()) ||
+      _variedadesDe(e).any((v) => _jaEstaNoAquario(v['id'].toString()));
+
+  /// O que o card está mostrando: a base, ou a variedade escolhida.
+  ///
+  /// A variedade chega da API só com identidade e foto; a biologia é a da
+  /// base, e por isso ela entra por baixo. Uma variedade que declare
+  /// biologia própria — o albino mais sensível, com pH máximo menor —
+  /// apareceria aqui com os números da base. A decisão de compatibilidade
+  /// não depende disto: o diálogo de adicionar reanalisa pelo id da
+  /// variedade, e é o servidor quem responde.
+  Map<String, dynamic> _emExibicao(Map<String, dynamic> e) {
+    final escolhida = _variedadeEscolhida[e['id'].toString()];
+    if (escolhida == null) return e;
+    final v = _variedadesDe(e).firstWhere(
+      (v) => v['id'].toString() == escolhida,
+      orElse: () => const <String, dynamic>{},
+    );
+    if (v.isEmpty) return e;
+    return {
+      ...e,
+      'id': v['id'],
+      'nome_comum': v['nome_comum'],
+      'imagem': v['imagem'],
+      'imagem_miniatura': v['imagem_miniatura'],
+      'imagem_credito': v['imagem_credito'],
+      'nome_variedade': v['nome_curto'],
+    };
+  }
+
+  static const _acentos = {
+    'á': 'a', 'à': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a',
+    'é': 'e', 'ê': 'e', 'è': 'e', 'ë': 'e',
+    'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i',
+    'ó': 'o', 'ô': 'o', 'õ': 'o', 'ò': 'o', 'ö': 'o',
+    'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u', 'ç': 'c',
+  };
+
+  String _semAcento(String texto) => texto
+      .toLowerCase()
+      .split('')
+      .map((c) => _acentos[c] ?? c)
+      .join();
+
+  /// Quem buscou "marmorato" quer ver o Marmorato, e não o card fechado
+  /// do Acará Bandeira. A API devolve a base; aqui o card já abre com a
+  /// variedade procurada escolhida.
+  void _escolherPelaBusca() {
+    final termo = _semAcento(_busca.trim());
+    if (termo.isEmpty) return;
+    for (final e in _especies) {
+      final base = e['id'].toString();
+      for (final v in _variedadesDe(e)) {
+        if (_semAcento(v['nome_comum']?.toString() ?? '').contains(termo)) {
+          _variedadeEscolhida[base] = v['id'].toString();
+          _abertos.add(base);
+          break;
+        }
+      }
+    }
+  }
 
   void _onNavTap(int index) {
     if (index == 2) return;
@@ -667,7 +745,9 @@ class _TelaPeixesState extends State<TelaPeixes> {
     final decisao = _decisaoDe(e);
     final avisos = _avisosDe(e);
     final cor = _corEspecie(e);
-    final jaTem = _jaEstaNoAquario(id);
+    final exibida = _emExibicao(e);
+    final jaTem = _familiaNoAquario(e);
+    final variedades = _variedadesDe(e);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -733,6 +813,21 @@ class _TelaPeixesState extends State<TelaPeixes> {
                               color: AppTheme.hintCampo.withValues(alpha: 0.95),
                             ),
                           ),
+                          // Sem este aviso ninguém saberia que há variedades
+                          // até abrir o card por acaso.
+                          if (variedades.isNotEmpty) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              variedades.length == 1
+                                  ? '+ 1 variedade'
+                                  : '+ ${variedades.length} variedades',
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.ctaEntrar,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -763,10 +858,14 @@ class _TelaPeixesState extends State<TelaPeixes> {
                   // Com foto no catálogo, o banner vira a foto de verdade;
                   // sem ela, continua o degradê com o ícone, que é melhor
                   // do que um buraco no meio do card.
-                  if (e['imagem'] != null)
+                  // A foto é a da variedade escolhida. Se ela não tiver
+                  // foto, fica o degradê — e não a foto da base: um acará
+                  // prateado com o nome "Leopardo Azul" embaixo engana quem
+                  // está justamente escolhendo pela aparência.
+                  if (exibida['imagem'] != null)
                     FotoEspecieGrande(
-                      caminho: e['imagem']?.toString(),
-                      credito: e['imagem_credito']?.toString(),
+                      caminho: exibida['imagem']?.toString(),
+                      credito: exibida['imagem_credito']?.toString(),
                     )
                   else
                     Container(
@@ -784,13 +883,32 @@ class _TelaPeixesState extends State<TelaPeixes> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Center(
-                        child: FaIcon(
-                          FontAwesomeIcons.fish,
-                          size: 42,
-                          color: cor.withValues(alpha: 0.55),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            FaIcon(
+                              FontAwesomeIcons.fish,
+                              size: 42,
+                              color: cor.withValues(alpha: 0.55),
+                            ),
+                            if (exibida['nome_variedade'] != null) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                'Sem foto desta variedade ainda',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: cor.withValues(alpha: 0.8),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ),
+                  if (variedades.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    _buildVariedades(e, cor),
+                  ],
                   const SizedBox(height: 14),
 
                   Row(
@@ -897,12 +1015,125 @@ class _TelaPeixesState extends State<TelaPeixes> {
                   ],
 
                   const SizedBox(height: 16),
-                  _botaoAdicionar(e, decisao, jaTem),
+                  _botaoAdicionar(
+                    exibida,
+                    decisao,
+                    _jaEstaNoAquario(exibida['id'].toString()),
+                  ),
                 ],
               ),
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  /// Faixa horizontal com a base e cada variedade dela.
+  Widget _buildVariedades(Map<String, dynamic> e, Color cor) {
+    final base = e['id'].toString();
+    final escolhida = _variedadeEscolhida[base];
+    final variedades = _variedadesDe(e);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Variedades',
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.tituloBemVindo.withValues(alpha: 0.85),
+          ),
+        ),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _chipVariedade(
+                rotulo: 'Padrão',
+                miniatura: e['imagem_miniatura']?.toString(),
+                cor: cor,
+                ativo: escolhida == null,
+                noAquario: _jaEstaNoAquario(base),
+                onTap: () => setState(() => _variedadeEscolhida.remove(base)),
+              ),
+              for (final v in variedades)
+                _chipVariedade(
+                  rotulo: v['nome_curto']?.toString() ?? '',
+                  miniatura: v['imagem_miniatura']?.toString(),
+                  cor: cor,
+                  ativo: escolhida == v['id'].toString(),
+                  noAquario: _jaEstaNoAquario(v['id'].toString()),
+                  onTap: () => setState(
+                    () => _variedadeEscolhida[base] = v['id'].toString(),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _chipVariedade({
+    required String rotulo,
+    required String? miniatura,
+    required Color cor,
+    required bool ativo,
+    required bool noAquario,
+    required VoidCallback onTap,
+  }) {
+    // Material, e não Container com cor: a ondulação do toque é pintada
+    // no Material mais próximo, e um Container colorido por cima a
+    // esconderia — o mesmo defeito corrigido na tela de configurações.
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Material(
+        color: ativo ? cor.withValues(alpha: 0.14) : AppTheme.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: BorderSide(
+            color: ativo ? cor : AppTheme.bordaCard,
+            width: ativo ? 1.6 : 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(5, 5, 12, 5),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FotoEspecie(
+                  caminho: miniatura,
+                  cor: cor,
+                  tamanho: 28,
+                  proporcaoIcone: 0.5,
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  rotulo,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: ativo ? FontWeight.w700 : FontWeight.w500,
+                    color: AppTheme.tituloBemVindo,
+                  ),
+                ),
+                if (noAquario) ...[
+                  const SizedBox(width: 5),
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    size: 14,
+                    color: Color(0xFF00A878),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

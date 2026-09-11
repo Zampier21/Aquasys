@@ -16,8 +16,10 @@ from app.models.especie import (
 from app.models.usuario import Usuario
 from app.schemas.especie import (
     AnaliseResponse, CompatividadeResumo, EspecieCreate, EspecieResponse,
+    VariedadeResumo,
     HabitanteResponse, PovoamentoCreate, PovoamentoUpdate,
 )
+from app.services import variedades as svc_variedades
 from app.services.compatibilidade import (
     MOTIVOS_IMPEDITIVOS, Nivel, avaliar_adicao, avaliar_especie_no_aquario,
 )
@@ -99,7 +101,26 @@ def _url_imagem(especie_id, miniatura: bool = False) -> str:
     return f"/peixes/{especie_id}/imagem{sufixo}"
 
 
-def _montar_especie(especie: Especie, creditos: dict) -> EspecieResponse:
+def _montar_variedade(
+    variedade: Especie, base: Especie, creditos: dict
+) -> VariedadeResumo:
+    """Variedade como ela aparece dentro do card da base."""
+    resumo = VariedadeResumo(
+        id=variedade.id,
+        nome_comum=variedade.nome_comum,
+        nome_curto=svc_variedades.nome_curto(variedade, base),
+    )
+    credito = creditos.get(variedade.id)
+    if credito is not None:
+        resumo.imagem = _url_imagem(variedade.id)
+        resumo.imagem_miniatura = _url_imagem(variedade.id, miniatura=True)
+        resumo.imagem_credito = _credito_em_texto(*credito)
+    return resumo
+
+
+def _montar_especie(
+    especie: Especie, creditos: dict, variedades: Optional[list] = None
+) -> EspecieResponse:
     """Espécie do catálogo, com os caminhos da foto quando ela existe."""
     resposta = EspecieResponse.model_validate(especie)
 
@@ -109,6 +130,13 @@ def _montar_especie(especie: Especie, creditos: dict) -> EspecieResponse:
         resposta.imagem_miniatura = _url_imagem(especie.id, miniatura=True)
         resposta.imagem_credito = _credito_em_texto(*credito)
 
+    # As variedades vêm de fora porque quem lista o catálogo já as
+    # carregou em bloco, junto com os créditos das fotos — buscá-las
+    # aqui, uma espécie por vez, traria de volta o N+1 que a listagem
+    # existe para evitar.
+    resposta.variedades = [
+        _montar_variedade(v, especie, creditos) for v in (variedades or [])
+    ]
     return resposta
 
 
@@ -195,8 +223,17 @@ def listar_especies(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    """Catálogo de espécies, com busca tolerante a variações de escrita."""
-    query = db.query(Especie).filter(Especie.ativo == True)  # noqa: E712
+    """Catálogo de espécies, com busca tolerante a variações de escrita.
+
+    Lista apenas as espécies-base. As variedades — Tetra Neon Negro
+    Albino, Acará Bandeira Leopardo Azul — vão dentro do card da base,
+    para que oito acarás-bandeira não ocupem oito linhas de uma lista
+    que o usuário percorre com o polegar.
+    """
+    query = db.query(Especie).filter(
+        Especie.ativo == True,  # noqa: E712
+        Especie.variante_de_id.is_(None),
+    )
 
     if busca:
         query = _filtro_busca(query, busca)
@@ -208,8 +245,57 @@ def listar_especies(
         )
 
     especies = query.order_by(Especie.nome_comum).all()
-    creditos = _creditos_das_imagens(db, [e.id for e in especies])
-    return [_montar_especie(e, creditos) for e in especies]
+
+    # Buscar "albino" tem que achar alguma coisa. Como a variedade não
+    # aparece na lista, procura-se também entre elas e devolve-se a base
+    # correspondente — quem procurou encontra o card certo, já com a
+    # variedade dentro.
+    if busca:
+        das_variedades = _filtro_busca(
+            db.query(Especie).filter(
+                Especie.ativo == True,  # noqa: E712
+                Especie.variante_de_id.isnot(None),
+            ),
+            busca,
+        ).all()
+        ja_listadas = {e.id for e in especies}
+        faltando = {
+            v.variante_de_id for v in das_variedades
+            if v.variante_de_id not in ja_listadas
+        }
+        if faltando:
+            especies += (
+                db.query(Especie)
+                .filter(Especie.id.in_(faltando), Especie.ativo == True)  # noqa: E712
+                .all()
+            )
+            especies.sort(key=lambda e: (e.nome_comum or "").lower())
+
+    # As variedades de todas as espécies numa consulta só, e não uma por
+    # card: é o mesmo motivo pelo qual os créditos das fotos são
+    # carregados em bloco logo abaixo.
+    por_base = {}
+    if especies:
+        variedades = (
+            db.query(Especie)
+            .filter(
+                Especie.variante_de_id.in_([e.id for e in especies]),
+                Especie.ativo == True,  # noqa: E712
+            )
+            .order_by(Especie.nome_comum)
+            .all()
+        )
+        for v in variedades:
+            por_base.setdefault(v.variante_de_id, []).append(v)
+
+    todos_ids = [e.id for e in especies] + [
+        v.id for lista in por_base.values() for v in lista
+    ]
+    creditos = _creditos_das_imagens(db, todos_ids)
+    return [
+        _montar_especie(e, creditos, por_base.get(e.id))
+        for e in especies
+    ]
 
 
 # ═══════════════════════════════════════════════════════
@@ -418,7 +504,13 @@ def especies_compativeis(
     excecoes = _carregar_excecoes(db)
 
     resposta = []
-    for especie in db.query(Especie).filter(Especie.ativo == True).all():  # noqa: E712
+    # Só as bases: a variedade tem a mesma biologia e produziria uma
+    # linha idêntica na lista de compatíveis.
+    candidatas = db.query(Especie).filter(
+        Especie.ativo == True,  # noqa: E712
+        Especie.variante_de_id.is_(None),
+    ).all()
+    for especie in candidatas:
         analise = avaliar_adicao(
             nova=especie,
             quantidade=especie.cardume_minimo or 1,

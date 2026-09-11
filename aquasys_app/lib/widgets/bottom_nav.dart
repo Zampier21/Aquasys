@@ -81,8 +81,17 @@ class BottomNav extends StatelessWidget {
                         child: ativo ? itens[i].iconeAtivo : itens[i].icone,
                       ),
                       const SizedBox(height: 4),
+                      // Uma linha só, sempre. Sem isto o rótulo quebra
+                      // quando a largura aperta — e, no limite, uma letra
+                      // por linha —, o que faz a coluna crescer muito além
+                      // dos 62 px da barra e estourar o layout. Acontece
+                      // ao encolher a janela no navegador, e aconteceria
+                      // também com fonte de sistema muito ampliada.
                       Text(
                         itens[i].rotulo,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: false,
                         style: TextStyle(
                           fontSize: 11,
                           color: cor,

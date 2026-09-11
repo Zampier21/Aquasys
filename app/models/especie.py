@@ -1,8 +1,8 @@
 import uuid
 
 from sqlalchemy import (
-    Boolean, Column, DateTime, Float, ForeignKey,
-    Integer, LargeBinary, String, Text, UniqueConstraint,
+    Boolean, Column, DateTime, Float, ForeignKey, Index,
+    Integer, LargeBinary, String, Text, UniqueConstraint, text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -58,12 +58,64 @@ class Especie(Base):
     observacoes = Column(Text)
     ativo       = Column(Boolean, nullable=False, default=True)
     criado_em   = Column(DateTime, nullable=False, server_default=func.now())
+
+    # ─── Variedades ────────────────────────────────────
+    # Tetra Neon Negro e Tetra Neon Negro Albino são o mesmo peixe: mesma
+    # água, mesmo porte, mesmo temperamento. Muda a aparência, e é só ela
+    # que a loja precisa mostrar. A variedade aponta para a espécie-base,
+    # e o catálogo lista só as bases — assim oito acarás-bandeira não
+    # ocupam oito linhas de uma lista percorrida com o polegar.
+    #
+    # Os campos de biologia da variedade são PREENCHIDOS a partir da
+    # base, e não deixados nulos para herdar na leitura. O porquê está em
+    # app/services/variedades.py, e resume-se a isto: campo nulo faz a
+    # variedade sumir do cálculo da faixa ideal, silenciosamente.
+    variante_de_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("especie.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    base = relationship(
+        "Especie",
+        remote_side=[id],
+        back_populates="variantes",
+    )
+    # Chama-se `variantes`, e não `variedades`, de propósito. O schema
+    # de saída tem um campo `variedades`, e o Pydantic, lendo por nome de
+    # atributo, tentaria validar estes objetos do ORM como se já fossem o
+    # resumo pronto — e falharia por falta do `nome_curto`, que é
+    # calculado. Nomes diferentes deixam claro que um é a relação e o
+    # outro é o que sai na resposta.
+    variantes = relationship(
+        "Especie",
+        back_populates="base",
+        cascade="all, delete-orphan",
+        order_by="Especie.nome_comum",
+    )
+
     foto = relationship(
         "EspecieImagem",
         back_populates="especie",
         uselist=False,
         cascade="all, delete-orphan",
         lazy="raise",
+    )
+
+    __table_args__ = (
+        # Uma espécie-BASE por nome científico. O índice já existia no
+        # banco sem estar declarado aqui, e por isso o banco de teste — que
+        # é montado a partir destes modelos — não o tinha: os testes das
+        # variedades passavam, e o banco real as recusava. Declarado, os
+        # dois passam a se comportar igual. Variedades ficam de fora porque
+        # compartilham o nome científico da base: são o mesmo animal.
+        Index(
+            "idx_especie_cientifico",
+            func.lower(nome_cientifico),
+            unique=True,
+            postgresql_where=text("variante_de_id IS NULL"),
+        ),
+        # A listagem do catálogo filtra por esta coluna a cada abertura.
+        Index("idx_especie_variante_de", "variante_de_id"),
     )
 
 

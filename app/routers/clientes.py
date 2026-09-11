@@ -6,12 +6,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core import planos
 from app.core.deps import get_usuario_atual
 from app.core.documento import formatar_documento
 from app.core.security import hash_senha
 from app.database import get_db
 from app.models.usuario import Usuario
-from app.schemas.usuario import ClienteCreate, ClienteResponse, ClienteUpdate
+from app.schemas.usuario import (
+    ClienteCreate, ClienteResponse, ClienteUpdate, PlanoResponse,
+)
 
 router = APIRouter()
 
@@ -37,6 +40,42 @@ def _montar_resposta(cliente: Usuario) -> ClienteResponse:
         email=cliente.email,
         ativo=cliente.ativo,
         criado_em=cliente.criado_em,
+    )
+
+
+def _acessos_ativos(db: Session, dono: Usuario) -> int:
+    """Quantos acessos da loja estão ocupando vaga neste momento.
+
+    Só o ativo conta. Desativar um cliente devolve a vaga — do contrário
+    a loja pagaria para sempre por quem deixou de ser cliente.
+    """
+    return (
+        db.query(func.count(Usuario.id))
+        .filter(Usuario.dono_id == dono.id, Usuario.ativo.is_(True))
+        .scalar()
+        or 0
+    )
+
+
+def _exigir_vaga(db: Session, dono: Usuario) -> None:
+    """Barra a criação ou a reativação quando o plano já está cheio.
+
+    O teto é da assinatura, não da tela: verificar aqui é o que impede
+    que uma requisição montada fora do aplicativo o contorne.
+    """
+    ativos = _acessos_ativos(db, dono)
+    if planos.cabe_mais_um(dono.plano, ativos):
+        return
+
+    teto = planos.limite(dono.plano)
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            f"O plano {planos.rotulo(dono.plano)} permite {teto} acessos "
+            f"ativos, e todos estão em uso. Desative um acesso que não "
+            f"esteja mais em atendimento ou fale com a AquaSys para "
+            f"ampliar o plano."
+        ),
     )
 
 
@@ -88,6 +127,31 @@ def listar_clientes(
 
 
 # ═══════════════════════════════════════════════════════
+# PLANO
+# ═══════════════════════════════════════════════════════
+# Declarada ANTES de /{cliente_id}: o FastAPI casa as rotas na ordem em
+# que são escritas, e "plano" seria engolido como identificador.
+@router.get("/plano", response_model=PlanoResponse)
+def plano_da_loja(
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual),
+):
+    """Plano da assinatura e quantos acessos ainda cabem nele."""
+    dono = exigir_dono(usuario)
+    ativos = _acessos_ativos(db, dono)
+    teto = planos.limite(dono.plano)
+
+    return PlanoResponse(
+        plano=dono.plano or planos.PLANO_PADRAO,
+        rotulo=planos.rotulo(dono.plano),
+        ativos=ativos,
+        limite=teto,
+        restantes=planos.restantes(dono.plano, ativos),
+        ilimitado=teto is None,
+    )
+
+
+# ═══════════════════════════════════════════════════════
 # DETALHAR
 # ═══════════════════════════════════════════════════════
 @router.get("/{cliente_id}", response_model=ClienteResponse)
@@ -111,6 +175,7 @@ def criar_cliente(
 ):
     """Cria o acesso do cliente com a senha inicial definida pela loja."""
     dono = exigir_dono(usuario)
+    _exigir_vaga(db, dono)
 
     if _documento_em_uso(db, dados.cpf_cnpj):
         raise HTTPException(
@@ -150,6 +215,12 @@ def editar_cliente(
 
     campos = dados.model_dump(exclude_unset=True)
     senha = campos.pop("senha", None)
+
+    # Reativar volta a ocupar vaga, então passa pela mesma verificação da
+    # criação. Sem isto o teto seria contornável: bastaria desativar,
+    # criar outro e reativar o primeiro.
+    if campos.get("ativo") is True and not cliente.ativo:
+        _exigir_vaga(db, dono)
 
     for campo, valor in campos.items():
         setattr(cliente, campo, valor)
