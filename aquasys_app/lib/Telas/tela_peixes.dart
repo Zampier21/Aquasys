@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../Tema/app_tema.dart';
 import 'tela_importar_peixes.dart';
+import 'tela_revisar_especies.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/cabecalho_usuario.dart';
 import '../widgets/foto_especie.dart';
@@ -63,6 +64,13 @@ class _TelaPeixesState extends State<TelaPeixes> {
     super.dispose();
   }
 
+  /// Quantas fichas da loja estão à espera de revisão.
+  ///
+  /// Serve ao selo sobre o ícone de revisar: sem ele, a loja só
+  /// descobriria que há ficha incompleta entrando na tela, e depois de
+  /// uma importação é justamente quando há.
+  int _aRevisar = 0;
+
   // ─── Carregamento ───────────────────────────────────────
   Future<void> _carregarTudo() async {
     setState(() {
@@ -95,12 +103,27 @@ class _TelaPeixesState extends State<TelaPeixes> {
       }
 
       await _carregarDadosDoAquario();
+      await _contarARevisar();
     } catch (e) {
       _erro = 'Não foi possível carregar os peixes.';
       debugPrint('tela_peixes: falha ao carregar — $e');
     } finally {
       if (mounted) setState(() => _carregando = false);
     }
+  }
+
+  /// Conta as fichas incompletas, só na conta da loja.
+  ///
+  /// Falha de rede aqui não é erro de tela: o selo some e o resto do
+  /// catálogo continua funcionando. Avisar sobre um contador seria pior
+  /// do que não mostrá-lo.
+  Future<void> _contarARevisar() async {
+    if (widget.tipoUsuario != 'dono') return;
+
+    final r = await PeixeService.incompletas();
+    if (!mounted) return;
+
+    _aRevisar = r['sucesso'] == true ? (r['dados'] as List).length : 0;
   }
 
   /// Recarrega o que depende do aquário selecionado: selos e habitantes.
@@ -365,21 +388,92 @@ class _TelaPeixesState extends State<TelaPeixes> {
         children: [
           Expanded(child: campo),
           const SizedBox(width: 10),
-          Material(
-            color: AppTheme.superficieSuave,
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const TelaImportarPeixes(),
-                ),
+          _acaoDaLoja(
+            icone: Icons.upload_file_rounded,
+            dica: 'Importar lista de estoque',
+            destino: const TelaImportarPeixes(),
+          ),
+          const SizedBox(width: 8),
+          // A revisão vem ao lado da importação porque é o passo
+          // seguinte: a lista entra, e o que ficou incompleto é
+          // preenchido aqui.
+          _acaoDaLoja(
+            icone: Icons.fact_check_outlined,
+            dica: _aRevisar == 0
+                ? 'Revisar fichas incompletas'
+                : '$_aRevisar ${_aRevisar == 1 ? "ficha" : "fichas"} '
+                    'a revisar',
+            destino: const TelaRevisarEspecies(),
+            contador: _aRevisar,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Botão de ação que só existe na conta da loja.
+  Widget _acaoDaLoja({
+    required IconData icone,
+    required String dica,
+    required Widget destino,
+    int contador = 0,
+  }) {
+    final botao = Material(
+      color: AppTheme.superficieSuave,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => destino),
+          );
+          // A revisão muda a ficha das espécies, e o catálogo desta
+          // tela já está em memória. Sem recarregar, o card continuaria
+          // mostrando os campos vazios.
+          if (mounted) _carregarTudo();
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(13),
+          child: Icon(icone, size: 22, color: AppTheme.primaria),
+        ),
+      ),
+    );
+
+    if (contador == 0) return Tooltip(message: dica, child: botao);
+
+    return Tooltip(
+      message: dica,
+      // `clipBehavior: none` deixa o selo passar da borda do botão. Sem
+      // isso o Stack recorta o pedaço que sai para fora.
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          botao,
+          Positioned(
+            top: -3,
+            right: -3,
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 19),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppTheme.alerta,
+                borderRadius: BorderRadius.circular(20),
+                // A borda da cor do fundo separa o selo do ícone, senão
+                // os dois se encostam e viram um borrão.
+                border: Border.all(color: AppTheme.backgroundApp, width: 1.6),
               ),
-              child: const Padding(
-                padding: EdgeInsets.all(13),
-                child: Icon(Icons.upload_file_rounded,
-                    size: 22, color: AppTheme.primaria),
+              child: Text(
+                // Acima de 99 o número não caberia, e a diferença entre
+                // 100 e 300 fichas pendentes não muda o que fazer.
+                contador > 99 ? '99+' : '$contador',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.white,
+                  height: 1.1,
+                ),
               ),
             ),
           ),

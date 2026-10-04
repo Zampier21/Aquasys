@@ -48,6 +48,21 @@ class TestTipoDeAgua:
         """O kinguio é marcado nos dois, e para o aquarismo é de doce."""
         assert fishbase._agua(-1, -1, 0) == "doce"
 
+    def test_doce_ganha_mesmo_dos_tres_marcados(self):
+        assert fishbase._agua(-1, -1, -1) == "doce"
+
+    def test_marinho_ganha_de_salobra(self):
+        """Peixe de recife e estuário é mantido em aquário marinho.
+
+        São 1460 espécies na v24.07 contra 97 exclusivamente salobras.
+        Classificadas como salobras, o motor as recusaria num aquário
+        marinho, e a recusa por ambiente é impeditiva.
+        """
+        assert fishbase._agua(0, -1, -1) == "marinho"
+
+    def test_salobra_sozinha_continua_salobra(self):
+        assert fishbase._agua(0, -1, 0) == "salobra"
+
     def test_sem_sinalizador_nenhum_fica_nulo(self):
         assert fishbase._agua(0, 0, 0) is None
 
@@ -372,3 +387,132 @@ class TestContraOServicoReal:
         assert f is not None
         assert f.clima == "subtropical"
         assert f.tipo_agua == "doce"
+
+
+# ═══════════════════════════════════════════════════════
+# LISTA QUE JÁ TRAZ O NOME CIENTÍFICO
+# ═══════════════════════════════════════════════════════
+class TestNomeCientificoNaLista:
+    """O caminho curto, e o melhor dos dois.
+
+    Quando a lista da loja já traz o nome científico, não há o que
+    adivinhar: a FishBase indexa 35 mil espécies por esse nome e ela
+    própria diz se o nome existe. Esse caminho não passa pela busca por
+    nome popular, que erra, nem pela Wikipedia, que estrangula lista
+    grande com HTTP 429.
+    """
+
+    @pytest.fixture
+    def indice(self, monkeypatch):
+        monkeypatch.setattr(fishbase, "_indice", {
+            "paracheirodon innesi": ficha(
+                spec_code=4714, nome_cientifico="Paracheirodon innesi",
+                nome_popular="Neon tetra", tamanho_adulto_cm=2.22,
+                tipo_agua="doce", ph_min=5.0, ph_max=7.0, clima="tropical",
+            ),
+        })
+
+    @pytest.fixture
+    def wikipedia_proibida(self, monkeypatch):
+        """Prova que o caminho curto não encosta na Wikipedia."""
+        from app.services import enriquecimento
+
+        def nao(nome):
+            raise AssertionError(
+                "não devia consultar a Wikipedia para nome científico"
+            )
+
+        monkeypatch.setattr(enriquecimento, "sugerir", nao)
+
+    def test_reconhece_e_preenche_sem_consultar_a_wikipedia(
+        self, client, cab_loja, db, indice, wikipedia_proibida
+    ):
+        corpo = subir(client, cab_loja, "Paracheirodon innesi",
+                      aplicar=True, buscar=True).json()
+
+        assert corpo["gravacao"]["com_ficha"] == 1
+        criada = db.query(Especie).filter(
+            Especie.nome_cientifico == "Paracheirodon innesi"
+        ).one()
+        assert criada.tamanho_adulto_cm == 2.22
+        assert criada.clima == "tropical"
+
+    def test_o_nome_comum_vira_o_popular_e_nao_o_cientifico(
+        self, client, cab_loja, db, indice, wikipedia_proibida
+    ):
+        """Nome científico na aba de peixes não é nome de peixe."""
+        subir(client, cab_loja, "Paracheirodon innesi",
+              aplicar=True, buscar=True)
+
+        criada = db.query(Especie).filter(
+            Especie.nome_cientifico == "Paracheirodon innesi"
+        ).one()
+        assert criada.nome_comum == "Neon tetra"
+
+    def test_o_nome_da_lista_fica_guardado(
+        self, client, cab_loja, db, loja, indice, wikipedia_proibida
+    ):
+        """É por ele que o lojista reconhece o item na planilha dele."""
+        from app.models.especie import LojaEspecie
+
+        subir(client, cab_loja, "Paracheirodon innesi",
+              aplicar=True, buscar=True)
+
+        vinculo = db.query(LojaEspecie).filter(
+            LojaEspecie.dono_id == loja.id
+        ).one()
+        assert vinculo.nome_na_lista == "Paracheirodon innesi"
+
+    def test_nao_e_sensivel_a_caixa(
+        self, client, cab_loja, db, indice, wikipedia_proibida
+    ):
+        corpo = subir(client, cab_loja, "PARACHEIRODON INNESI",
+                      aplicar=True, buscar=True).json()
+        assert corpo["gravacao"]["com_ficha"] == 1
+
+    def test_o_relatorio_explica_de_onde_veio(
+        self, client, cab_loja, indice, wikipedia_proibida
+    ):
+        corpo = subir(client, cab_loja, "Paracheirodon innesi",
+                      aplicar=True, buscar=True).json()
+        assert "FishBase" in corpo["itens"][0]["como"]
+
+    def test_nome_popular_ainda_passa_pela_wikipedia(
+        self, client, cab_loja, db, indice, monkeypatch
+    ):
+        """O caminho antigo continua valendo para quem manda nome popular."""
+        from app.services import enriquecimento
+
+        chamadas = []
+
+        def sugerir(nome):
+            chamadas.append(nome)
+            return enriquecimento.Sugestao(
+                nome_cientifico="Paracheirodon innesi",
+                titulo="Tetra-neon", qid="Q1",
+            )
+
+        monkeypatch.setattr(enriquecimento, "sugerir", sugerir)
+        corpo = subir(client, cab_loja, "Tetra Neon",
+                      aplicar=True, buscar=True).json()
+
+        assert chamadas == ["Tetra Neon"]
+        assert corpo["gravacao"]["com_ficha"] == 1
+
+    def test_sem_nome_popular_na_base_mantem_o_cientifico(
+        self, client, cab_loja, db, monkeypatch, wikipedia_proibida
+    ):
+        monkeypatch.setattr(fishbase, "_indice", {
+            "symphysodon aequifasciatus": ficha(
+                spec_code=1,
+                nome_cientifico="Symphysodon aequifasciatus",
+                nome_popular=None, tipo_agua="doce",
+            ),
+        })
+        subir(client, cab_loja, "Symphysodon aequifasciatus",
+              aplicar=True, buscar=True)
+
+        criada = db.query(Especie).filter(
+            Especie.nome_cientifico == "Symphysodon aequifasciatus"
+        ).one()
+        assert criada.nome_comum == "Symphysodon aequifasciatus"

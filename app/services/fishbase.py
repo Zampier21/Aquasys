@@ -59,8 +59,8 @@ CLIMAS = {
 # Só estas colunas são lidas de cada tabela. O parquet é colunar, então
 # projetar aqui é o que evita carregar as 102 colunas de `species` e as
 # 123 de `stocks` na memória de um servidor de 512 MB.
-COLUNAS_ESPECIE = ["SpecCode", "Genus", "Species", "Fresh", "Brack",
-                   "Saltwater", "Length"]
+COLUNAS_ESPECIE = ["SpecCode", "Genus", "Species", "FBname", "Fresh",
+                   "Brack", "Saltwater", "Length"]
 COLUNAS_ESTOQUE = ["SpecCode", "Level", "EnvTemp", "pHMin", "pHMax",
                    "dHMin", "dHMax"]
 
@@ -80,6 +80,10 @@ class Ficha:
 
     spec_code: int
     nome_cientifico: str
+    # Nome popular que a FishBase publica, em inglês. Serve de ponto de
+    # partida quando a lista da loja trouxe só o nome científico:
+    # "Neon tetra" na tela é melhor que "Paracheirodon innesi".
+    nome_popular: Optional[str] = None
     tamanho_adulto_cm: Optional[float] = None
     tipo_agua: Optional[str] = None
     ph_min: Optional[float] = None
@@ -168,16 +172,23 @@ def _agua(fresh, brack, salt) -> Optional[str]:
     """Traduz os três sinalizadores da FishBase para o enumerado daqui.
 
     A coluna `tipo_agua` guarda um valor só, e há espécie marcada em
-    mais de um ambiente (o kinguio é doce e salobra). A ordem de
-    preferência é a do aquarismo ornamental, que é o uso do AquaSys:
-    água doce ganha, depois salobra, depois marinho.
+    mais de um ambiente. A ordem é a do aquarismo ornamental, que é o
+    uso do AquaSys: doce ganha de tudo, e marinho ganha de salobra.
+
+    Essa segunda parte foi medida antes de ser escolhida. Na v24.07,
+    1460 espécies são salobra e marinha sem serem de doce, contra 97
+    exclusivamente salobras. Aquelas 1460 são peixes de recife e de
+    estuário que o aquarista mantém em aquário marinho, e o cavalo-
+    marinho `Hippocampus reidi` é uma delas. Chamando-as de salobras, o
+    motor de compatibilidade as recusaria num aquário marinho, e a
+    recusa por ambiente é impeditiva: não há como o usuário contornar.
     """
     if fresh:
         return "doce"
-    if brack:
-        return "salobra"
     if salt:
         return "marinho"
+    if brack:
+        return "salobra"
     return None
 
 
@@ -216,6 +227,7 @@ def _montar() -> Dict[str, Ficha]:
         indice[cientifico.lower()] = Ficha(
             spec_code=linha["SpecCode"],
             nome_cientifico=cientifico,
+            nome_popular=(linha["FBname"] or "").strip() or None,
             tamanho_adulto_cm=_arredondar(linha["Length"]),
             tipo_agua=_agua(linha["Fresh"], linha["Brack"], linha["Saltwater"]),
             ph_min=_arredondar(estoque.get("pHMin")),

@@ -20,6 +20,32 @@ class PeixeService {
       Api.postArquivo('/peixes/importar', bytes,
           query: {'aplicar': aplicar});
 
+  /// Ficha completa de uma espécie.
+  ///
+  /// A lista de incompletas devolve só o que falta, e não os valores
+  /// que já existem. O formulário de revisão precisa dos dois para não
+  /// mostrar campo vazio onde já há dado gravado.
+  static Future<Map<String, dynamic>> detalhar(String especieId) =>
+      Api.get('/peixes/$especieId');
+
+  /// Fichas da loja que a importação deixou pela metade.
+  ///
+  /// Cada item traz, em `faltam`, os rótulos do que ainda não foi
+  /// preenchido. A lista vem do próprio motor de compatibilidade, que é
+  /// quem sabe do que precisa para dar resposta inteira.
+  static Future<Map<String, dynamic>> incompletas() =>
+      Api.get('/peixes/incompletas');
+
+  /// Grava a correção da ficha.
+  ///
+  /// Mandar `revisada: true` só é aceito quando nada essencial estiver
+  /// faltando; do contrário a API responde 422 dizendo o que falta.
+  static Future<Map<String, dynamic>> revisar(
+    String especieId,
+    Map<String, dynamic> dados,
+  ) =>
+      Api.put('/peixes/$especieId', corpo: dados);
+
   /// Compatibilidade de todo o catálogo com um aquário.
   ///
   /// A API devolve uma lista; a tela consulta por espécie a cada card,

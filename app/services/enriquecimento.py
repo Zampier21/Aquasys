@@ -37,6 +37,8 @@ um preenchimento manual, aceite errado custa um conselho errado.
 """
 
 import json
+import threading
+import time
 import unicodedata
 import urllib.error
 import urllib.parse
@@ -47,7 +49,22 @@ from typing import Optional
 BUSCA = "https://pt.wikipedia.org/w/api.php"
 ENTIDADE = "https://www.wikidata.org/wiki/Special:EntityData/%s.json"
 TEMPO_LIMITE = 8
-AGENTE = "AquaSys/1.0 (trabalho academico; importacao de catalogo)"
+# A política de uso da Wikimedia pede identificação com forma de
+# contato. Agente genérico é estrangulado primeiro.
+AGENTE = ("AquaSys/1.0 (trabalho academico; "
+          "https://github.com/Zampier21/Aquasys)")
+
+# Intervalo mínimo entre pedidos, em segundos.
+#
+# Sem isto a importação de uma lista grande é cortada: medindo com 42
+# nomes, a Wikipedia respondeu 429 a partir do décimo segundo, porque
+# cada nome custa dois pedidos e eles saíam em rajada. O resto da lista
+# vinha sem nome científico, e a loja não tinha como saber por quê.
+INTERVALO = 0.6
+
+# Uma única nova tentativa depois do 429, respeitando o Retry-After que
+# vier. Insistir mais do que isso é cavar o próprio bloqueio.
+ESPERA_MAXIMA = 5.0
 
 # Palavras que não ajudam a identificar e que, exigidas, barrariam
 # acertos: a loja escreve "Peixe Palhaço" e o item se chama "Palhaço".
@@ -72,13 +89,49 @@ def normalizar(texto: str) -> str:
     return " ".join(so_letras.split())
 
 
-def _pedir(url: str) -> dict:
+_ultimo_pedido = 0.0
+_trava_do_ritmo = threading.Lock()
+
+
+def _esperar_a_vez() -> None:
+    """Segura o pedido até o intervalo mínimo ter passado."""
+    global _ultimo_pedido
+    with _trava_do_ritmo:
+        agora = time.monotonic()
+        atraso = INTERVALO - (agora - _ultimo_pedido)
+        if atraso > 0:
+            time.sleep(atraso)
+        _ultimo_pedido = time.monotonic()
+
+
+def _buscar(url: str) -> dict:
+    _esperar_a_vez()
     pedido = urllib.request.Request(url, headers={"User-Agent": AGENTE})
+    with urllib.request.urlopen(pedido, timeout=TEMPO_LIMITE) as resposta:
+        return json.loads(resposta.read())
+
+
+def _pedir(url: str) -> dict:
     try:
-        with urllib.request.urlopen(pedido, timeout=TEMPO_LIMITE) as resposta:
-            return json.loads(resposta.read())
+        return _buscar(url)
+    except urllib.error.HTTPError as erro:
+        if erro.code != 429:
+            raise Indisponivel(str(erro)) from erro
+
+        # O servidor diz quanto esperar; quando não diz, o intervalo
+        # dobrado serve de palpite.
+        try:
+            espera = float(erro.headers.get("Retry-After") or INTERVALO * 2)
+        except (TypeError, ValueError):
+            espera = INTERVALO * 2
+        time.sleep(min(espera, ESPERA_MAXIMA))
+
+        try:
+            return _buscar(url)
+        except (urllib.error.URLError, TimeoutError, ValueError) as outra:
+            raise Indisponivel(f"limite de uso da fonte: {outra}") from outra
     except (urllib.error.URLError, TimeoutError, ValueError) as erro:
-        raise Indisponivel(str(erro))
+        raise Indisponivel(str(erro)) from erro
 
 
 def _pagina(nome: str) -> Optional[tuple]:

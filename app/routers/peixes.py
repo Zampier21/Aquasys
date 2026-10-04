@@ -18,14 +18,15 @@ from app.models.especie import (
 from app.models.usuario import Usuario
 from app.schemas.especie import (
     AnaliseResponse, CandidatoImportacao, CompatividadeResumo, EspecieCreate,
-    EspecieResponse, ImportacaoResponse, ItemImportado, ResumoGravacao,
-    VariedadeResumo,
+    EspecieIncompleta, EspecieResponse, EspecieUpdate, ImportacaoResponse,
+    ItemImportado, ResumoGravacao, VariedadeResumo,
     HabitanteResponse, PovoamentoCreate, PovoamentoUpdate,
 )
 from app.services import importacao as svc_importacao
 from app.services import variedades as svc_variedades
 from app.services.compatibilidade import (
     MOTIVOS_IMPEDITIVOS, Nivel, avaliar_adicao, avaliar_especie_no_aquario,
+    campos_faltantes,
 )
 
 router = APIRouter()
@@ -697,6 +698,105 @@ def compatibilidade_com_aquario(
     )
 
 
+# ═══════════════════════════════════════════════════════
+# REVISÃO DA FICHA
+# ═══════════════════════════════════════════════════════
+# Campos que a FishBase preenche. Se a loja mudar algum deles, o
+# crédito deixa de descrever a ficha inteira, e passa a dizer isso.
+_CAMPOS_DA_FISHBASE = (
+    "tamanho_adulto_cm", "tipo_agua", "ph_min", "ph_max",
+    "dgh_min", "dgh_max",
+)
+_MARCA_DE_AJUSTE = ", com ajustes da loja"
+
+
+class _ComAsMudancas:
+    """A espécie como ela ficaria depois da edição, sem gravar nada.
+
+    Serve para perguntar ao motor se a ficha fecharia, antes de tocar no
+    objeto. A alternativa seria alterar e desfazer, e desfazer a sessão
+    do SQLAlchemy arrasta tudo o que mais estiver nela.
+    """
+
+    def __init__(self, especie, campos: dict) -> None:
+        self._especie = especie
+        self._campos = campos
+
+    def __getattr__(self, nome):
+        if nome in self._campos:
+            return self._campos[nome]
+        return getattr(self._especie, nome)
+
+
+def _minha_especie(especie_id: UUID, usuario: Usuario, db: Session) -> Especie:
+    """A espécie, desde que seja desta loja e dela possa ser editada.
+
+    Três respostas diferentes de propósito. Espécie de outra loja volta
+    404, e não 403: dizer "existe, mas não é sua" entregaria o catálogo
+    da concorrente a quem ficasse tentando identificadores. Já a do
+    catálogo curado existe e a loja vê, então a recusa pode explicar.
+    """
+    especie = db.query(Especie).filter(Especie.id == especie_id).first()
+
+    if especie is None or (
+        especie.dono_id is not None and especie.dono_id != usuario.id
+    ):
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, "Espécie não encontrada"
+        )
+
+    if especie.dono_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Esta espécie é do catálogo do AquaSys e vale para todas as "
+            "lojas. Para corrigi-la, fale com a AquaSys.",
+        )
+
+    return especie
+
+
+# Declarada ANTES de /{especie_id}: o FastAPI casa na ordem de escrita,
+# e "incompletas" seria engolido como identificador.
+@router.get("/incompletas", response_model=List[EspecieIncompleta])
+def especies_incompletas(
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual),
+):
+    """Fichas da loja que a importação deixou pela metade.
+
+    É a fila de trabalho da tela de revisão. Só devolve o que é da
+    própria loja: o catálogo curado não é dela para revisar.
+    """
+    if usuario.tipo != "dono":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Apenas contas empresariais revisam fichas",
+        )
+
+    especies = (
+        db.query(Especie)
+        .filter(
+            Especie.dono_id == usuario.id,
+            Especie.ativo.is_(True),
+            Especie.revisada.is_(False),
+        )
+        .order_by(Especie.nome_comum)
+        .all()
+    )
+
+    return [
+        EspecieIncompleta(
+            id=e.id,
+            nome_comum=e.nome_comum,
+            nome_cientifico=e.nome_cientifico,
+            clima=e.clima,
+            fonte_dados=e.fonte_dados,
+            faltam=campos_faltantes(e),
+        )
+        for e in especies
+    ]
+
+
 @router.get("/{especie_id}", response_model=EspecieResponse)
 def detalhar_especie(
     especie_id: UUID,
@@ -731,6 +831,70 @@ def criar_especie(
 
     especie = Especie(**dados.model_dump(), dono_id=usuario.id)
     db.add(especie)
+    db.commit()
+    db.refresh(especie)
+    return especie
+
+
+@router.put("/{especie_id}", response_model=EspecieResponse)
+def revisar_especie(
+    especie_id: UUID,
+    dados: EspecieUpdate,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual),
+):
+    """Corrige a ficha de uma espécie da loja e, se der, fecha a revisão.
+
+    Marcar `revisada` como verdadeiro é o que tira o aviso de ficha
+    incompleta do motor de compatibilidade, e por isso não é só um
+    sinalizador: a rota só aceita quando nada essencial estiver
+    faltando, conferido depois de aplicar as mudanças. Do contrário,
+    bastaria marcar a caixa para o sistema passar a afirmar com
+    convicção o que ele não sabe.
+    """
+    if usuario.tipo != "dono":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Apenas contas empresariais revisam fichas",
+        )
+
+    especie = _minha_especie(especie_id, usuario, db)
+    campos = dados.model_dump(exclude_unset=True)
+    fechar = campos.pop("revisada", None)
+
+    # O nome é obrigatório na tabela. Mandá-lo nulo explicitamente
+    # chegaria ao banco e estouraria como erro interno; aqui é só uma
+    # edição que não pede nada.
+    if "nome_comum" in campos and campos["nome_comum"] is None:
+        campos.pop("nome_comum")
+
+    # A conferência vem ANTES de qualquer escrita. Recusar depois de
+    # alterar o objeto exigiria desfazer a sessão, e desfazer a sessão
+    # arrasta o que mais estivesse nela.
+    if fechar is True:
+        faltam = campos_faltantes(_ComAsMudancas(especie, campos))
+        if faltam:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Para marcar a ficha como conferida, preencha antes: "
+                + ", ".join(faltam),
+            )
+
+    mexeu_no_que_veio_de_fora = any(
+        campo in campos and campos[campo] != getattr(especie, campo)
+        for campo in _CAMPOS_DA_FISHBASE
+    )
+
+    for campo, valor in campos.items():
+        setattr(especie, campo, valor)
+
+    if (mexeu_no_que_veio_de_fora and especie.fonte_dados
+            and _MARCA_DE_AJUSTE not in especie.fonte_dados):
+        especie.fonte_dados = (especie.fonte_dados + _MARCA_DE_AJUSTE)[:120]
+
+    if fechar is not None:
+        especie.revisada = fechar
+
     db.commit()
     db.refresh(especie)
     return especie

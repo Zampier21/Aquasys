@@ -376,12 +376,30 @@ def aplicar(casados: List[Casamento], db: Session, dono, buscar=True) -> dict:
 
         # ─── Não existe no catálogo: vira rascunho da loja ───
         cientifico = None
+        ficha = None
+        veio_do_cientifico = False
+
         if buscar:
-            try:
-                sugestao = enriquecimento.sugerir(caso.nome_lido)
-                cientifico = sugestao.nome_cientifico if sugestao else None
-            except enriquecimento.Indisponivel:
-                resumo["sem_busca"] = True
+            # A lista pode já trazer o nome científico, e aí não há nada
+            # a adivinhar: a própria FishBase diz se o nome existe nela.
+            # Esse caminho é melhor que o outro em tudo, porque não
+            # depende de busca por nome popular, que erra, nem da
+            # Wikipedia, que estrangula lista grande.
+            if not resumo["sem_fishbase"]:
+                try:
+                    ficha = fishbase.consultar(caso.nome_lido)
+                except fishbase.Indisponivel:
+                    resumo["sem_fishbase"] = True
+
+            if ficha is not None:
+                cientifico = ficha.nome_cientifico
+                veio_do_cientifico = True
+            else:
+                try:
+                    sugestao = enriquecimento.sugerir(caso.nome_lido)
+                    cientifico = sugestao.nome_cientifico if sugestao else None
+                except enriquecimento.Indisponivel:
+                    resumo["sem_busca"] = True
 
         # A sugestão pode apontar para algo que o catálogo já tem sob
         # outro nome popular. Vincular é melhor do que duplicar.
@@ -411,16 +429,26 @@ def aplicar(casados: List[Casamento], db: Session, dono, buscar=True) -> dict:
         # é por isso que `revisada` segue falso mesmo quando isto dá
         # certo. Ver app/services/fishbase.py.
         campos = []
-        if cientifico and not resumo["sem_fishbase"]:
+        if ficha is None and cientifico and not resumo["sem_fishbase"]:
             try:
                 ficha = fishbase.consultar(cientifico)
-                if ficha is not None:
-                    campos = ficha.preencher(especie)
             except fishbase.Indisponivel:
                 # Uma falha vale para a lista inteira: a primeira
                 # consulta é que baixa o snapshot, e insistir a cada
                 # nome tentaria baixar nove megabytes por peixe.
                 resumo["sem_fishbase"] = True
+
+        if ficha is not None:
+            campos = ficha.preencher(especie)
+            # Quando a lista trouxe o nome científico, ele ficou como
+            # nome comum, e "Paracheirodon innesi" na aba de peixes do
+            # aquarista não é nome de peixe. O nome popular da FishBase
+            # é melhor ponto de partida, e a loja renomeia na revisão.
+            # O nome como veio na lista fica guardado em
+            # `loja_especie.nome_na_lista`, que é por ele que o lojista
+            # reconhece o item.
+            if veio_do_cientifico and ficha.nome_popular:
+                especie.nome_comum = ficha.nome_popular[:100]
 
         _vincular(db, dono, especie, caso.nome_lido)
         resumo["criados"] += 1
@@ -431,7 +459,12 @@ def aplicar(casados: List[Casamento], db: Session, dono, buscar=True) -> dict:
 
         caso.situacao = "criado"
         caso.especie = especie
-        if campos:
+        if campos and veio_do_cientifico:
+            caso.como = (
+                "nome científico reconhecido na FishBase, com %d campo(s) "
+                "preenchidos" % len(campos)
+            )
+        elif campos:
             caso.como = (
                 "criado como %s, com %d campo(s) da FishBase"
                 % (cientifico, len(campos))

@@ -58,6 +58,47 @@ MOTIVOS_CORRIGIVEIS = {
 }
 
 
+# ─── O que o motor precisa para dar resposta inteira ───────
+# Esta é a definição de "ficha completa", e ela mora aqui de propósito:
+# quem sabe do que precisa é quem usa. A rota de revisão, a tela de
+# preenchimento e o aviso de ficha incompleta leem desta lista, então
+# acrescentar uma regra nova ao motor ajusta os três de uma vez.
+#
+# Cada par é (campo, rótulo para gente). A ordem é a da tela.
+CAMPOS_ESSENCIAIS = (
+    ("tipo_agua", "tipo de água"),
+    ("temp_min", "temperatura mínima"),
+    ("temp_max", "temperatura máxima"),
+    ("ph_min", "pH mínimo"),
+    ("ph_max", "pH máximo"),
+    ("tamanho_adulto_cm", "tamanho adulto"),
+    ("volume_minimo_l", "volume mínimo"),
+    ("comportamento", "temperamento"),
+    ("agrupamento", "agrupamento"),
+    ("nivel_natacao", "nível de natação"),
+    ("alimentacao", "alimentação"),
+)
+
+
+def campos_faltantes(especie) -> List[str]:
+    """Campos essenciais que a espécie ainda não tem, com rótulo legível.
+
+    `cardume_minimo` só é exigido de quem vive em cardume: pedir o
+    número para um peixe solitário não faz sentido, e exigir faria a
+    ficha nunca fechar.
+    """
+    faltam = [
+        rotulo for campo, rotulo in CAMPOS_ESSENCIAIS
+        if getattr(especie, campo, None) is None
+    ]
+
+    if (getattr(especie, "agrupamento", None) == "cardume"
+            and getattr(especie, "cardume_minimo", None) is None):
+        faltam.append("cardume mínimo")
+
+    return faltam
+
+
 def _fmt(v: Optional[float]) -> str:
     if v is None:
         return "?"
@@ -285,11 +326,18 @@ def avaliar_adicao(
     # Espécie criada por importação, ainda sem revisão humana. O aviso
     # entra antes de tudo para que a decisão nunca seja "liberado".
     if getattr(nova, "revisada", True) is False:
+        faltam = campos_faltantes(nova)
+        # Dizer o que falta é mais útil do que dizer que falta algo:
+        # quem lê o aviso é quem vai preencher.
+        detalhe = (
+            "falta preencher " + ", ".join(faltam)
+            if faltam else "ainda não foi conferida por uma pessoa"
+        )
         resultado.adicionar(
             Nivel.RUIM, "ficha_incompleta",
             f"A ficha de {nova.nome_comum} veio de uma importação e ainda "
-            f"não foi conferida: porte e temperamento não estão "
-            f"preenchidos, então esta análise está incompleta",
+            f"não foi conferida: {detalhe}, então esta análise está "
+            f"incompleta",
         )
 
     # Condições do aquário

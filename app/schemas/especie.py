@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.base import Entrada
 
@@ -62,6 +62,100 @@ class EspecieCreate(EspecieBase, Entrada):
     espécie com `Especie(**dados.model_dump())`, e é justamente essa
     forma que transforma um campo a mais em coluna escrita.
     """
+# ─── Entrada: revisar a ficha de uma espécie da loja ─────
+# Os enumerados são validados aqui, e não só no banco. A tabela tem
+# restrição de verificação para cada um deles; sem o `Literal`, um
+# valor fora da lista chegaria ao PostgreSQL, estouraria lá e voltaria
+# como erro 500. Validado aqui, volta 422 dizendo o que é aceito.
+TipoAgua = Literal["doce", "salobra", "marinho"]
+Comportamento = Literal["pacifico", "semi_agressivo", "territorial",
+                        "agressivo"]
+Agrupamento = Literal["cardume", "par", "harem", "solitario"]
+NivelNatacao = Literal["fundo", "meio", "superficie", "todos"]
+ReefSafe = Literal["sim", "com_ressalva", "nao"]
+Dificuldade = Literal["facil", "medio", "dificil"]
+
+
+class EspecieUpdate(Entrada):
+    """Campos que a loja pode corrigir na própria ficha.
+
+    Ficam de fora, de propósito: `dono_id` e `ativo`, que são governo do
+    sistema; `variante_de_id`, que mudaria a espécie de família; e
+    `clima` e `fonte_dados`, que descrevem de onde o dado veio e não
+    seriam mais verdade se fossem digitados por cima.
+    """
+
+    nome_comum: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    nome_cientifico: Optional[str] = Field(default=None, max_length=150)
+    nomes_alternativos: Optional[str] = None
+    familia: Optional[str] = Field(default=None, max_length=80)
+    origem: Optional[str] = Field(default=None, max_length=120)
+
+    tipo_agua: Optional[TipoAgua] = None
+    temp_min: Optional[float] = Field(default=None, ge=-5, le=50)
+    temp_max: Optional[float] = Field(default=None, ge=-5, le=50)
+    ph_min: Optional[float] = Field(default=None, ge=0, le=14)
+    ph_max: Optional[float] = Field(default=None, ge=0, le=14)
+    dgh_min: Optional[float] = Field(default=None, ge=0, le=60)
+    dgh_max: Optional[float] = Field(default=None, ge=0, le=60)
+
+    tamanho_adulto_cm: Optional[float] = Field(default=None, gt=0, le=500)
+    volume_minimo_l: Optional[int] = Field(default=None, gt=0, le=100000)
+
+    comportamento: Optional[Comportamento] = None
+    agressivo_coespecificos: Optional[bool] = None
+    agrupamento: Optional[Agrupamento] = None
+    cardume_minimo: Optional[int] = Field(default=None, gt=0, le=1000)
+    nivel_natacao: Optional[NivelNatacao] = None
+
+    morde_barbatana: Optional[bool] = None
+    barbatana_longa: Optional[bool] = None
+    come_plantas: Optional[bool] = None
+    come_invertebrados: Optional[bool] = None
+    reef_safe: Optional[ReefSafe] = None
+
+    alimentacao: Optional[str] = Field(default=None, max_length=100)
+    nivel_dificuldade: Optional[Dificuldade] = None
+    expectativa_vida_anos: Optional[int] = Field(default=None, gt=0, le=200)
+    observacoes: Optional[str] = None
+
+    # Marcar como conferida só é aceito quando nada essencial estiver
+    # faltando. A rota confere depois de aplicar as mudanças.
+    revisada: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def _faixas_na_ordem(self):
+        """Mínimo acima do máximo é erro de digitação, não faixa.
+
+        Gravado assim, o motor calcularia sobreposição vazia e a espécie
+        ficaria incompatível com todo aquário, sem dizer por quê.
+        """
+        for menor, maior, nome in (
+            (self.temp_min, self.temp_max, "temperatura"),
+            (self.ph_min, self.ph_max, "pH"),
+            (self.dgh_min, self.dgh_max, "dureza"),
+        ):
+            if menor is not None and maior is not None and menor > maior:
+                raise ValueError(
+                    f"A {nome} mínima não pode ser maior que a máxima"
+                )
+        return self
+
+
+class EspecieIncompleta(BaseModel):
+    """Uma espécie da loja à espera de revisão, e o que falta nela."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    nome_comum: str
+    nome_cientifico: Optional[str] = None
+    clima: Optional[str] = None
+    fonte_dados: Optional[str] = None
+    # Rótulos legíveis, na ordem em que a tela pergunta.
+    faltam: List[str] = []
+
+
 class VariedadeResumo(BaseModel):
     """Uma variedade dentro do card da espécie-base.
 
