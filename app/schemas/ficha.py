@@ -4,9 +4,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.base import Entrada
+
 
 # ─── Item do check-list de maquinários ───────────────────
-class EquipamentoInput(BaseModel):
+class EquipamentoInput(Entrada):
     equipamento: str = Field(..., min_length=1, max_length=100)
     presente: bool = False
 
@@ -17,7 +19,7 @@ class EquipamentoResponse(EquipamentoInput):
 
 
 # ─── Teste de água ───────────────────────────────────────
-class TesteInput(BaseModel):
+class TesteInput(Entrada):
     parametro: str = Field(..., min_length=1, max_length=60)
     valor: Optional[float] = None
     unidade: Optional[str] = Field(default=None, max_length=10)
@@ -29,7 +31,7 @@ class TesteResponse(TesteInput):
 
 
 # ─── Aba de descrição ────────────────────────────────────
-class DescricaoInput(BaseModel):
+class DescricaoInput(Entrada):
     chao_malhado: Optional[bool] = None
     conferido_2x: Optional[bool] = None
     stability_aplicado: Optional[bool] = None
@@ -42,7 +44,7 @@ class DescricaoResponse(DescricaoInput):
 
 
 # ─── Cliente de manutenção (o cadastro reaproveitado) ────
-class ClienteManutencaoBase(BaseModel):
+class ClienteManutencaoBase(Entrada):
     nome: str = Field(..., min_length=2, max_length=150)
     telefone: Optional[str] = Field(default=None, max_length=30)
     endereco: Optional[str] = Field(default=None, max_length=250)
@@ -59,7 +61,7 @@ class ClienteManutencaoCreate(ClienteManutencaoBase):
     pass
 
 
-class ClienteManutencaoUpdate(BaseModel):
+class ClienteManutencaoUpdate(Entrada):
     nome: Optional[str] = Field(default=None, min_length=2, max_length=150)
     telefone: Optional[str] = Field(default=None, max_length=30)
     endereco: Optional[str] = Field(default=None, max_length=250)
@@ -82,7 +84,7 @@ class ClienteManutencaoResponse(ClienteManutencaoBase):
 
 
 # ─── Entrada: criar ficha ────────────────────────────────
-class FichaCreate(BaseModel):
+class FichaCreate(Entrada):
     cliente_id: Optional[UUID] = None
     nome_cliente: Optional[str] = Field(default=None, min_length=2, max_length=150)
     nome_empresa: Optional[str] = Field(default=None, max_length=150)
@@ -100,7 +102,13 @@ class FichaCreate(BaseModel):
 
 
 # ─── Entrada: editar ficha ───────────────────────────────
-class FichaUpdate(BaseModel):
+class FichaUpdate(Entrada):
+    # A tela de edição mostra o seletor de cliente, e até aqui o campo
+    # não existia neste contrato: quem trocava o cliente de uma ficha
+    # via a mudança sumir ao salvar, porque o Pydantic descartava o
+    # campo desconhecido em silêncio. Declarado, a rota confere se o
+    # cliente é mesmo da loja antes de religar.
+    cliente_id: Optional[UUID] = None
     nome_cliente: Optional[str] = Field(default=None, min_length=2, max_length=150)
     nome_empresa: Optional[str] = Field(default=None, max_length=150)
     data_atendimento: Optional[date] = None
@@ -127,6 +135,9 @@ class FichaResumo(BaseModel):
     nome_empresa: Optional[str] = None
     data_atendimento: Optional[date] = None
     tipo_instalacao: Optional[str] = None
+    # Falso quando a ficha foi arquivada (RF010). O atendimento continua
+    # registrado; só sai da lista.
+    ativo: bool = True
     criado_em: datetime
 
 

@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.base import Entrada
+
 from app.core.documento import documento_valido, somente_digitos, tipo_documento
 
 # Checagem leve de e-mail — evita depender do pacote email-validator.
@@ -21,7 +23,7 @@ def _limpar_email(valor: Optional[str]) -> Optional[str]:
 
 
 # ─── Entrada: cadastrar cliente (feito pelo dono) ────────
-class ClienteCreate(BaseModel):
+class ClienteCreate(Entrada):
     nome: str = Field(..., min_length=2, max_length=150)
     cpf_cnpj: str = Field(..., description="CPF ou CNPJ, com ou sem máscara")
     senha_inicial: str = Field(..., min_length=6, max_length=100)
@@ -48,7 +50,7 @@ class ClienteCreate(BaseModel):
 
 
 # ─── Entrada: editar cliente ─────────────────────────────
-class ClienteUpdate(BaseModel):
+class ClienteUpdate(Entrada):
     nome: Optional[str] = Field(default=None, min_length=2, max_length=150)
     email: Optional[str] = Field(default=None, max_length=150)
     senha: Optional[str] = Field(default=None, min_length=6, max_length=100)

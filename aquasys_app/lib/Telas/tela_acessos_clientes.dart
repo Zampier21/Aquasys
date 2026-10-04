@@ -15,7 +15,17 @@ class TelaAcessosClientes extends StatefulWidget {
 class _TelaAcessosClientesState extends State<TelaAcessosClientes> {
   List<Map<String, dynamic>> _clientes = [];
   bool _carregando = true;
+  bool _verInativos = false;
   String? _erro;
+
+  // Desativar não apaga o cadastro, só tira o acesso e devolve a vaga do
+  // plano. Sem uma aba para os inativos, o cadastro ficava no banco sem
+  // nenhum caminho de volta, e a loja tinha de criar tudo de novo.
+  List<Map<String, dynamic>> get _ativos =>
+      _clientes.where((c) => c['ativo'] != false).toList();
+
+  List<Map<String, dynamic>> get _inativos =>
+      _clientes.where((c) => c['ativo'] == false).toList();
 
   @override
   void initState() {
@@ -29,13 +39,16 @@ class _TelaAcessosClientesState extends State<TelaAcessosClientes> {
       _erro = null;
     });
 
-    final resultado = await ClienteService.listar();
+    final resultado = await ClienteService.listar(incluirInativos: true);
     if (!mounted) return;
 
     setState(() {
       _carregando = false;
       if (resultado['sucesso'] == true) {
         _clientes = List<Map<String, dynamic>>.from(resultado['dados']);
+        // Reativar o último inativo esvazia a aba: volta para a de ativos
+        // em vez de deixar a tela numa lista vazia.
+        if (_inativos.isEmpty) _verInativos = false;
       } else {
         _erro = resultado['erro'];
       }
@@ -78,6 +91,7 @@ class _TelaAcessosClientesState extends State<TelaAcessosClientes> {
                 ],
               ),
             ),
+            _buildFiltro(),
             Expanded(child: _buildConteudo()),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
@@ -102,6 +116,59 @@ class _TelaAcessosClientesState extends State<TelaAcessosClientes> {
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Abas de ativos e inativos. Só aparecem quando existe algum acesso
+  /// desativado: numa loja que nunca desativou ninguém, dois botões para
+  /// uma lista só seriam ruído.
+  Widget _buildFiltro() {
+    if (_carregando || _erro != null) return const SizedBox.shrink();
+    if (_inativos.isEmpty && !_verInativos) return const SizedBox.shrink();
+
+    Widget aba(String rotulo, int quantos, bool inativos) {
+      final selecionada = _verInativos == inativos;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => setState(() => _verInativos = inativos),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            decoration: BoxDecoration(
+              color: selecionada ? AppTheme.white : Colors.transparent,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: selecionada ? AppTheme.bordaCampo : Colors.transparent,
+              ),
+            ),
+            child: Text(
+              '$rotulo ($quantos)',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: selecionada ? AppTheme.azulMedio : AppTheme.textoFraco,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: AppTheme.superficieSuave,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            aba('Ativos', _ativos.length, false),
+            aba('Inativos', _inativos.length, true),
           ],
         ),
       ),
@@ -144,7 +211,9 @@ class _TelaAcessosClientesState extends State<TelaAcessosClientes> {
       );
     }
 
-    if (_clientes.isEmpty) {
+    final lista = _verInativos ? _inativos : _ativos;
+
+    if (lista.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(28),
@@ -154,19 +223,25 @@ class _TelaAcessosClientesState extends State<TelaAcessosClientes> {
               Icon(Icons.person_off_outlined,
                   size: 48, color: AppTheme.textoFraco.withValues(alpha: 0.5)),
               const SizedBox(height: 12),
-              const Text(
-                'Nenhum acesso criado ainda',
-                style: TextStyle(
+              Text(
+                _verInativos
+                    ? 'Nenhum acesso desativado'
+                    : 'Nenhum acesso criado ainda',
+                style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                   color: AppTheme.azulMedio,
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
-                'Use "Adicionar Novo" para liberar o app a um cliente',
+              Text(
+                _verInativos
+                    ? 'Os acessos que você desativar aparecem aqui e podem '
+                        'ser reativados'
+                    : 'Use "Adicionar Novo" para liberar o app a um cliente',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: AppTheme.textoFraco),
+                style: const TextStyle(
+                    fontSize: 13, color: AppTheme.textoFraco),
               ),
             ],
           ),
@@ -179,21 +254,34 @@ class _TelaAcessosClientesState extends State<TelaAcessosClientes> {
       onRefresh: _carregar,
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-        itemCount: _clientes.length,
+        itemCount: lista.length,
         separatorBuilder: (_, _) => const SizedBox(height: 12),
         itemBuilder: (_, i) {
-          final cliente = _clientes[i];
+          final cliente = lista[i];
+          final inativo = cliente['ativo'] == false;
           return LinhaLista(
-            icone: const Icon(Icons.person_rounded,
-                color: AppTheme.white, size: 22),
+            icone: Icon(
+              inativo ? Icons.person_off_rounded : Icons.person_rounded,
+              color: AppTheme.white,
+              size: 22,
+            ),
             titulo: cliente['nome'] ?? '',
-            subtitulo: cliente['cpf_cnpj'],
+            subtitulo: inativo
+                ? '${cliente['cpf_cnpj']}  ·  sem acesso'
+                : cliente['cpf_cnpj'],
             onTap: () => _abrirAcoes(cliente),
             acoes: [
               IconButton(
-                icon: const Icon(Icons.more_vert_rounded,
-                    color: AppTheme.azulMedio, size: 20),
-                onPressed: () => _abrirAcoes(cliente),
+                icon: Icon(
+                  inativo
+                      ? Icons.restart_alt_rounded
+                      : Icons.more_vert_rounded,
+                  color: inativo ? AppTheme.sucesso : AppTheme.azulMedio,
+                  size: 20,
+                ),
+                onPressed: () => inativo
+                    ? _confirmarReativar(cliente)
+                    : _abrirAcoes(cliente),
               ),
             ],
           );
@@ -243,14 +331,26 @@ class _TelaAcessosClientesState extends State<TelaAcessosClientes> {
                 _abrirRedefinirSenha(cliente);
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.block_rounded, color: AppTheme.error),
-              title: const Text('Desativar acesso'),
-              onTap: () {
-                Navigator.pop(contexto);
-                _confirmarDesativar(cliente);
-              },
-            ),
+            if (cliente['ativo'] == false)
+              ListTile(
+                leading: const Icon(Icons.restart_alt_rounded,
+                    color: AppTheme.sucesso),
+                title: const Text('Reativar acesso'),
+                onTap: () {
+                  Navigator.pop(contexto);
+                  _confirmarReativar(cliente);
+                },
+              )
+            else
+              ListTile(
+                leading:
+                    const Icon(Icons.block_rounded, color: AppTheme.error),
+                title: const Text('Desativar acesso'),
+                onTap: () {
+                  Navigator.pop(contexto);
+                  _confirmarDesativar(cliente);
+                },
+              ),
             const SizedBox(height: 8),
           ],
         ),
@@ -369,6 +469,68 @@ class _TelaAcessosClientesState extends State<TelaAcessosClientes> {
               }
             },
             child: const Text('Desativar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmarReativar(Map<String, dynamic> cliente) {
+    showDialog(
+      context: context,
+      builder: (contexto) => AlertDialog(
+        backgroundColor: AppTheme.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text(
+          'Reativar acesso',
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.azulMedio,
+          ),
+        ),
+        content: Text(
+          '${cliente['nome']} volta a entrar no aplicativo com a mesma '
+          'senha de antes, e os aquários e o histórico continuam onde '
+          'estavam. O acesso volta a ocupar uma vaga do seu plano.',
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.black.withValues(alpha: 0.65),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(contexto),
+            child: const Text('Cancelar',
+                style: TextStyle(color: AppTheme.textoFraco)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.sucesso,
+              minimumSize: const Size(120, 44),
+            ),
+            onPressed: () async {
+              Navigator.pop(contexto);
+
+              final resultado = await ClienteService.editar(
+                id: cliente['id'],
+                ativo: true,
+              );
+              if (!mounted) return;
+
+              if (resultado['sucesso'] == true) {
+                _aviso('Acesso reativado.');
+                _carregar();
+              } else {
+                // Quando o plano está cheio a API responde 409 com o texto
+                // que explica o limite e o que fazer. Mostrar esse texto
+                // vale mais do que um "não foi possível" genérico.
+                _aviso(resultado['erro'], erro: true);
+              }
+            },
+            child: const Text('Reativar'),
           ),
         ],
       ),

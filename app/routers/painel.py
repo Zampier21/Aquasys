@@ -50,7 +50,7 @@ def painel(
     """Resumo da conta logada — os aquários dela, nada de terceiros."""
     aquarios = (
         db.query(Aquario)
-        .filter(Aquario.usuario_id == usuario.id)
+        .filter(Aquario.usuario_id == usuario.id, Aquario.ativo.is_(True))
         .order_by(Aquario.criado_em)
         .all()
     )

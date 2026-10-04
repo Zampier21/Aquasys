@@ -10,7 +10,14 @@ from app.routers.aquarios import regerar_alertas
 def main() -> None:
     db = SessionLocal()
     try:
-        aquarios = db.query(Aquario).order_by(Aquario.criado_em).all()
+        # O aquário excluído continua no banco, e regerar alerta para ele
+        # encheria a tabela de aviso que ninguém vai ver.
+        aquarios = (
+            db.query(Aquario)
+            .filter(Aquario.ativo.is_(True))
+            .order_by(Aquario.criado_em)
+            .all()
+        )
 
         for aquario in aquarios:
             regerar_alertas(aquario, db)

@@ -49,7 +49,13 @@ ALIMENTACAO_PREDADORA = {"carnivoro", "onivoro"}
 MOTIVOS_IMPEDITIVOS = {"ambiente", "predacao", "agressao", "lotacao"}
 
 # Corrigíveis: geram alerta, mas permitem seguir com confirmação explícita.
-MOTIVOS_CORRIGIVEIS = {"parametros", "comportamento", "territorio", "barbatana"}
+MOTIVOS_CORRIGIVEIS = {
+    "parametros", "comportamento", "territorio", "barbatana",
+    # Ficha que ninguém conferiu. Não impede, mas nunca sai "liberado":
+    # o que falta é justamente porte e temperamento, que são o que o
+    # motor usa para decidir. Melhor avisar do que afirmar.
+    "ficha_incompleta",
+}
 
 
 def _fmt(v: Optional[float]) -> str:
@@ -275,6 +281,16 @@ def avaliar_adicao(
 ) -> dict:
     excecoes = excecoes or {}
     resultado = Resultado()
+
+    # Espécie criada por importação, ainda sem revisão humana. O aviso
+    # entra antes de tudo para que a decisão nunca seja "liberado".
+    if getattr(nova, "revisada", True) is False:
+        resultado.adicionar(
+            Nivel.RUIM, "ficha_incompleta",
+            f"A ficha de {nova.nome_comum} veio de uma importação e ainda "
+            f"não foi conferida: porte e temperamento não estão "
+            f"preenchidos, então esta análise está incompleta",
+        )
 
     # Condições do aquário
     ambiente = avaliar_especie_no_aquario(nova, aquario)

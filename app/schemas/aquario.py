@@ -4,9 +4,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.base import Entrada
+
 
 # ─── Entrada: criar aquário ──────────────────────────────
-class AquarioCreate(BaseModel):
+class AquarioCreate(Entrada):
     nome: str = Field(..., min_length=1, max_length=100)
     volume_litros: float = Field(..., gt=0)
     temperatura: float
@@ -20,7 +22,7 @@ class AquarioCreate(BaseModel):
 
 
 # ─── Entrada: editar aquário ─────────────────────────────
-class AquarioUpdate(BaseModel):
+class AquarioUpdate(Entrada):
     nome: Optional[str] = Field(default=None, min_length=1, max_length=100)
     volume_litros: Optional[float] = Field(default=None, gt=0)
     temperatura: Optional[float] = None
@@ -42,6 +44,9 @@ class AquarioResponse(BaseModel):
     temperatura: float
     ph: float
     tipo: Optional[str] = None
+    # Falso quando o aquário foi excluído: é o que separa a lista
+    # normal da aba de restauração.
+    ativo: bool = True
 
     # Vêm da última medição em parametros_agua
     amonia_ppm: float = 0
@@ -57,7 +62,7 @@ class AquarioResponse(BaseModel):
 
 
 # ─── Entrada: registrar nova medição ─────────────────────
-class ParametrosCreate(BaseModel):
+class ParametrosCreate(Entrada):
     amonia_ppm: float = Field(default=0, ge=0)
     nitrito_ppm: float = Field(default=0, ge=0)
     nitrato_ppm: float = Field(default=0, ge=0)

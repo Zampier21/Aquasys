@@ -3,14 +3,14 @@ import 'package:flutter/material.dart';
 class AppTheme {
   // ─── Superfícies ──────────────────────────────────
   /// Fundo geral das telas.
-  static const Color backgroundApp = Color(0xFFF5FAFE);
+  static const Color backgroundApp = Color(0xFFF8FCFF);
 
   /// Card branco — modais, formulários, corpo dos cards abertos.
   static const Color backgroundCard = Color(0xFFFFFFFF);
 
   /// Azul claro dos agrupamentos: barras de seção, linhas de lista,
   /// faixas internas (é a cor que domina as telas no Figma).
-  static const Color superficieAzul = Color(0xFFC8DCE9);
+  static const Color superficieAzul = Color(0xFFCFDEE9);
 
   /// Versão suave do azul — blocos internos dentro de card branco.
   static const Color superficieSuave = Color(0xFFEAF4FB);
@@ -26,7 +26,7 @@ class AppTheme {
   static const Color azulEscuro = Color(0xFF023E8A);
 
   /// Azul médio — nomes de itens em listas e títulos de card.
-  static const Color azulMedio = Color(0xFF1B6FA8);
+  static const Color azulMedio = Color(0xCC023E8A);
 
   // ─── Texto ────────────────────────────────────────
   static const Color textoCorpo = Color(0x99000000);
@@ -37,23 +37,23 @@ class AppTheme {
   static const Color bordaCampo = Color(0xFFB8DDF0);
 
   // ─── Status ───────────────────────────────────────
-  static const Color sucesso = Color(0xFF00875A);
-  static const Color sucessoBorda = Color(0xFF9BDDBB);
+  static const Color sucesso = Color(0xFF28934F);
+  static const Color sucessoBorda = Color(0xFFB1F0C8);
   static const Color sucessoFundo = Color(0xFFE7F8EF);
 
-  static const Color alerta = Color(0xFFD97706);
-  static const Color alertaBorda = Color(0xFFFCE4B0);
+  static const Color alerta = Color(0xFFEAB308);
+  static const Color alertaBorda = Color(0xFFEFE3BE);
   static const Color alertaFundo = Color(0xFFFFF9EC);
-  static const Color alertaTexto = Color(0xFF92400E);
-  static const Color alertaPonto = Color(0xFFF59E0B);
+  static const Color alertaTexto = Color(0xFF7B6523);
+  static const Color alertaPonto = Color(0xFFFACC15);
 
-  static const Color error = Color(0xFFE53935);
+  static const Color error = Color(0xFFEF4444);
   static const Color errorFundo = Color(0xFFFFEBEE);
 
   // ─── Acentos dos cards de resumo ──────────────────
-  static const Color acentoVerde = Color(0xFF00A878);
+  static const Color acentoVerde = Color(0xFF22C55E);
   static const Color acentoAzul = Color(0xFF1565C0);
-  static const Color acentoRosa = Color(0xFFD6337F);
+  static const Color acentoRosa = Color(0xFFCA2FA3);
   static const Color acentoLaranja = Color(0xFFE07A3E);
 
   static const Color white = Color(0xFFFFFFFF);

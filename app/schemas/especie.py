@@ -3,6 +3,8 @@ from typing import List, Optional
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.base import Entrada
+
 # ═══════════════════════════════════════════════════════
 # CATÁLOGO DE ESPÉCIES
 # ═══════════════════════════════════════════════════════
@@ -43,9 +45,23 @@ class EspecieBase(BaseModel):
     imagem_url: Optional[str] = None
     observacoes: Optional[str] = None
 
+    # Classificação climática da espécie. Sai na resposta para a tela
+    # poder avisar "subtropical" num aquário tropical, mesmo antes de
+    # alguém preencher a faixa em graus.
+    clima: Optional[str] = None
+    # Crédito de quem publicou a medida. A licença da FishBase exige
+    # atribuição onde o dado aparecer, então isto não é enfeite: é o
+    # que a ficha mostra embaixo dos números.
+    fonte_dados: Optional[str] = None
 
-class EspecieCreate(EspecieBase):
-    pass
+
+class EspecieCreate(EspecieBase, Entrada):
+    """Cadastro manual de espécie.
+
+    Herda de `Entrada` para recusar campo não declarado: a rota monta a
+    espécie com `Especie(**dados.model_dump())`, e é justamente essa
+    forma que transforma um campo a mais em coluna escrita.
+    """
 class VariedadeResumo(BaseModel):
     """Uma variedade dentro do card da espécie-base.
 
@@ -107,7 +123,7 @@ class CompatividadeResumo(BaseModel):
     avisos: List[str] = []
 
 
-class SimulacaoRequest(BaseModel):
+class SimulacaoRequest(Entrada):
     especie_id: UUID
     aquario_id: UUID
     quantidade: int = Field(default=1, gt=0)
@@ -116,14 +132,14 @@ class SimulacaoRequest(BaseModel):
 # ═══════════════════════════════════════════════════════
 # POVOAMENTO — espécies dentro de cada aquário
 # ═══════════════════════════════════════════════════════
-class PovoamentoCreate(BaseModel):
+class PovoamentoCreate(Entrada):
     """Corpo do POST que adiciona uma espécie ao aquário."""
 
     especie_id: UUID
     quantidade: int = Field(default=1, gt=0)
 
 
-class PovoamentoUpdate(BaseModel):
+class PovoamentoUpdate(Entrada):
     """Ajuste de quantidade de uma espécie já presente."""
 
     quantidade: int = Field(..., gt=0)
@@ -144,3 +160,66 @@ class HabitanteResponse(BaseModel):
     # Nulo = sem foto; o app desenha o ícone padrão.
     imagem_miniatura: Optional[str] = None
     adicionado_em: datetime
+
+# ═══════════════════════════════════════════════════════
+# IMPORTAÇÃO DA LISTA DA LOJA
+# ═══════════════════════════════════════════════════════
+class CandidatoImportacao(BaseModel):
+    """Uma das espécies que o nome lido pode designar."""
+
+    id: UUID
+    nome_comum: str
+    nome_cientifico: Optional[str] = None
+
+
+class ItemImportado(BaseModel):
+    """O resultado da conferência de um nome da planilha."""
+
+    linha: int
+    nome_lido: str
+    vezes: int                       # quantas vezes o nome se repete na lista
+    # encontrado | criado | ambiguo | nao_encontrado
+    situacao: str
+
+    # Preenchidos quando a situação é "encontrado".
+    como: Optional[str] = None       # por qual nome o casamento aconteceu
+    especie_id: Optional[UUID] = None
+    nome_comum: Optional[str] = None
+    nome_cientifico: Optional[str] = None
+    variedade_de: Optional[str] = None
+
+    # "ambiguo" traz as espécies possíveis; "nao_encontrado", os nomes do
+    # catálogo parecidos com o que foi digitado.
+    candidatos: List[CandidatoImportacao] = []
+    sugestoes: List[str] = []
+
+
+class ResumoGravacao(BaseModel):
+    """O que a importação efetivamente gravou."""
+
+    vinculados: int        # já existiam no catálogo e entraram no estoque
+    criados: int           # viraram rascunho da loja, a revisar
+    com_cientifico: int    # dos criados, quantos ganharam nome científico
+    ja_estavam: int        # já constavam do estoque de antes
+    ignorados: int         # ambíguos, que exigem decisão da loja
+    sem_busca: bool        # a fonte externa não respondeu
+
+    # Quantos dos criados a FishBase conseguiu preencher, e se ela
+    # respondeu. A tela usa os dois para dizer à loja quanto de ficha
+    # ainda falta digitar.
+    com_ficha: int = 0
+    sem_fishbase: bool = False
+
+
+class ImportacaoResponse(BaseModel):
+    """Conferência da lista e, quando pedido, o que foi gravado."""
+
+    total_linhas: int                # nomes lidos, contando repetições
+    total_nomes: int                 # nomes distintos conferidos
+    encontrados: int
+    ambiguos: int
+    nao_encontrados: int
+    criados: int = 0
+    aplicado: bool = False
+    gravacao: Optional[ResumoGravacao] = None
+    itens: List[ItemImportado]

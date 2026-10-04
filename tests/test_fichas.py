@@ -189,3 +189,49 @@ class TestConteudoDaFicha:
         ph = next(t for t in r.json()["testes"] if t["parametro"] == "pH")
         # O banco guarda o código curto; o rótulo longo é da tela.
         assert ph["rotulo"] == "PH"
+
+
+class TestArquivamento:
+    """RF010: a ficha sai da lista sem que o atendimento se perca."""
+
+    def _criar(self, client, cab_loja):
+        r = client.post(
+            "/fichas/", json={"nome_cliente": "Dona Marta"}, headers=cab_loja
+        )
+        assert r.status_code == 201, r.text
+        return r.json()
+
+    def test_arquivar_tira_da_lista_e_poe_no_arquivo(self, client, cab_loja):
+        ficha = self._criar(client, cab_loja)
+        assert client.delete(
+            f"/fichas/{ficha['id']}", headers=cab_loja
+        ).status_code == 204
+
+        assert client.get("/fichas/", headers=cab_loja).json() == []
+
+        arquivadas = client.get(
+            "/fichas/", params={"arquivadas": True}, headers=cab_loja
+        ).json()
+        assert [f["nome_cliente"] for f in arquivadas] == ["Dona Marta"]
+        assert arquivadas[0]["ativo"] is False
+
+    def test_a_resposta_da_ficha_ativa_diz_que_esta_ativa(self, client, cab_loja):
+        self._criar(client, cab_loja)
+        (ficha,) = client.get("/fichas/", headers=cab_loja).json()
+        assert ficha["ativo"] is True
+
+    def test_restaurar_devolve_a_ficha_a_lista(self, client, cab_loja):
+        ficha = self._criar(client, cab_loja)
+        client.delete(f"/fichas/{ficha['id']}", headers=cab_loja)
+
+        r = client.post(f"/fichas/{ficha['id']}/restaurar", headers=cab_loja)
+        assert r.status_code == 200
+        assert r.json()["ativo"] is True
+        assert len(client.get("/fichas/", headers=cab_loja).json()) == 1
+
+    def test_a_arquivada_nao_abre_pelo_caminho_normal(self, client, cab_loja):
+        ficha = self._criar(client, cab_loja)
+        client.delete(f"/fichas/{ficha['id']}", headers=cab_loja)
+        assert client.get(
+            f"/fichas/{ficha['id']}", headers=cab_loja
+        ).status_code == 404

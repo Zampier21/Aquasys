@@ -15,8 +15,16 @@ class FichaService {
     };
   }
 
-  static Future<Map<String, dynamic>> listar({String? cliente}) =>
-      Api.get('/fichas/', query: {'cliente': cliente});
+  static Future<Map<String, dynamic>> listar({
+    String? cliente,
+    bool arquivadas = false,
+  }) =>
+      Api.get('/fichas/',
+          query: {'cliente': cliente, 'arquivadas': arquivadas});
+
+  /// Tira a ficha do arquivo e devolve à lista.
+  static Future<Map<String, dynamic>> restaurar(String id) =>
+      Api.post('/fichas/$id/restaurar', esperado: 200);
 
   static Future<Map<String, dynamic>> detalhar(String id) =>
       Api.get('/fichas/$id');
@@ -30,6 +38,7 @@ class FichaService {
   ) =>
       Api.put('/fichas/$id', corpo: ficha);
 
+  /// Arquiva a ficha. O atendimento registrado continua no banco.
   static Future<Map<String, dynamic>> excluir(String id) =>
       Api.delete('/fichas/$id');
 

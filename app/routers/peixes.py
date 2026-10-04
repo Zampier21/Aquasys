@@ -2,7 +2,9 @@ import unicodedata
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
+from fastapi import (
+    APIRouter, Depends, Header, HTTPException, Query, Request, Response, status,
+)
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
@@ -15,10 +17,12 @@ from app.models.especie import (
 )
 from app.models.usuario import Usuario
 from app.schemas.especie import (
-    AnaliseResponse, CompatividadeResumo, EspecieCreate, EspecieResponse,
+    AnaliseResponse, CandidatoImportacao, CompatividadeResumo, EspecieCreate,
+    EspecieResponse, ImportacaoResponse, ItemImportado, ResumoGravacao,
     VariedadeResumo,
     HabitanteResponse, PovoamentoCreate, PovoamentoUpdate,
 )
+from app.services import importacao as svc_importacao
 from app.services import variedades as svc_variedades
 from app.services.compatibilidade import (
     MOTIVOS_IMPEDITIVOS, Nivel, avaliar_adicao, avaliar_especie_no_aquario,
@@ -35,20 +39,50 @@ def _normalizar(texto: str) -> str:
     return "".join(c for c in sem_acento if not unicodedata.combining(c))
 
 
+# Comparação sem acento do lado do banco, por `translate` em vez da
+# extensão `unaccent`.
+#
+# A extensão fazia o mesmo e de forma mais geral, mas custava uma
+# dependência de instalação: todo banco novo precisava de
+# `CREATE EXTENSION unaccent`, o que exige privilégio de superusuário e
+# é um passo a mais em cada ambiente. Pior, ela é uma biblioteca
+# carregada pelo servidor, e no Windows com Controle Inteligente de
+# Aplicativos ligado o `unaccent.dll` não tem assinatura e é barrado:
+# a busca do catálogo respondia erro 500 na máquina de desenvolvimento
+# enquanto funcionava em produção.
+#
+# O `translate` é função embutida do PostgreSQL, sem biblioteca externa
+# e sem extensão. Cobre menos que a extensão, que trata todo o Unicode,
+# e cobre o que existe aqui: nome popular em português e nome
+# científico em latim. As duas caixas entram no mapa porque `lower()`
+# sob localidade C não rebaixa letra acentuada.
+_COM_ACENTO = (
+    "áàâãäåéèêëíìîïóòôõöøúùûüçñýÿ"
+    "ÁÀÂÃÄÅÉÈÊËÍÌÎÏÓÒÔÕÖØÚÙÛÜÇÑÝŸ"
+)
+_SEM_ACENTO = (
+    "aaaaaaeeeeiiiioooooouuuucnyy"
+    "aaaaaaeeeeiiiioooooouuuucnyy"
+)
+
+
+def _sem_acento(coluna):
+    """A coluna em minúsculas e sem acento, para comparar com o termo."""
+    return func.translate(func.lower(coluna), _COM_ACENTO, _SEM_ACENTO)
+
+
 def _filtro_busca(query, termo_bruto: str):
     termos = [t for t in _normalizar(termo_bruto).split() if t]
     if not termos:
         return query
 
     # Junta os três campos de nome num único texto pesquisável
-    campo = func.unaccent(
-        func.lower(
-            func.concat_ws(
-                " ",
-                Especie.nome_comum,
-                Especie.nome_cientifico,
-                Especie.nomes_alternativos,
-            )
+    campo = _sem_acento(
+        func.concat_ws(
+            " ",
+            Especie.nome_comum,
+            Especie.nome_cientifico,
+            Especie.nomes_alternativos,
         )
     )
 
@@ -157,12 +191,33 @@ def _buscar_aquario(aquario_id: UUID, usuario: Usuario, db: Session) -> Aquario:
     """Busca filtrando pelo usuário logado — impede acesso cruzado."""
     aquario = (
         db.query(Aquario)
-        .filter(Aquario.id == aquario_id, Aquario.usuario_id == usuario.id)
+        .filter(
+            Aquario.id == aquario_id,
+            Aquario.usuario_id == usuario.id,
+            Aquario.ativo.is_(True),
+        )
         .first()
     )
     if aquario is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Aquário não encontrado")
     return aquario
+
+
+def _loja_do_usuario(usuario: Usuario):
+    """A loja a que a conta pertence: ela mesma, se for empresarial."""
+    return usuario.id if usuario.tipo == "dono" else usuario.dono_id
+
+
+def _visiveis_para(usuario: Usuario):
+    """Catálogo curado mais o rascunho da loja do usuário.
+
+    O cliente enxerga o que a sua loja importou, e é esse o ponto de a
+    loja subir a lista: o aquarista ver o que ela tem antes de escolher.
+    """
+    loja = _loja_do_usuario(usuario)
+    if loja is None:
+        return Especie.dono_id.is_(None)
+    return (Especie.dono_id.is_(None)) | (Especie.dono_id == loja)
 
 
 def _buscar_especie(especie_id: UUID, db: Session) -> Especie:
@@ -233,6 +288,7 @@ def listar_especies(
     query = db.query(Especie).filter(
         Especie.ativo == True,  # noqa: E712
         Especie.variante_de_id.is_(None),
+        _visiveis_para(usuario),
     )
 
     if busca:
@@ -241,7 +297,7 @@ def listar_especies(
     if tipo_agua and tipo_agua.strip():
         # Comparação sem depender de maiúsculas nem acentos
         query = query.filter(
-            func.unaccent(func.lower(Especie.tipo_agua)) == _normalizar(tipo_agua)
+            _sem_acento(Especie.tipo_agua) == _normalizar(tipo_agua)
         )
 
     especies = query.order_by(Especie.nome_comum).all()
@@ -301,6 +357,96 @@ def listar_especies(
 # ═══════════════════════════════════════════════════════
 # IMAGENS DO CATÁLOGO
 # ═══════════════════════════════════════════════════════
+@router.post("/importar", response_model=ImportacaoResponse)
+async def importar_lista(
+    request: Request,
+    aplicar: bool = Query(
+        default=False,
+        description="Falso só confere; verdadeiro grava a lista da loja.",
+    ),
+    buscar: bool = Query(
+        default=True,
+        description="Procurar o nome científico dos peixes desconhecidos.",
+    ),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+):
+    """Confere uma lista de peixes em CSV contra o catálogo.
+
+    O corpo da requisição é o arquivo em si, sem envelope de formulário:
+    evita a dependência de multipart e deixa a detecção de codificação
+    aqui, que é onde dá para tentar UTF-8, UTF-8 com marcador do Excel e
+    as tabelas do Windows em ordem.
+
+    Com `aplicar` falso, nada é gravado: volta só o relatório do que
+    casou, do que ficou ambíguo e do que não existe. É o que a tela
+    mostra antes de a loja confirmar.
+
+    Com `aplicar` verdadeiro, o que casou entra no estoque da loja e o
+    que faltava vira espécie dela, marcada como não revisada. O ambíguo
+    fica de fora: escolher entre Acará Bandeira e Acará Disco por conta
+    própria colocaria no estoque um peixe que a loja não vende.
+    """
+    if usuario.tipo != "dono":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Apenas contas empresariais podem importar listas",
+        )
+
+    try:
+        nomes = svc_importacao.ler_nomes(await request.body())
+        casados = svc_importacao.casar(nomes, db, dono=usuario)
+    except svc_importacao.ArquivoInvalido as erro:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(erro)
+        )
+
+    gravacao = None
+    if aplicar:
+        gravacao = svc_importacao.aplicar(casados, db, usuario, buscar=buscar)
+
+    itens = []
+    for c in casados:
+        base = c.especie.base if c.especie is not None else None
+        itens.append(
+            ItemImportado(
+                linha=c.linha,
+                nome_lido=c.nome_lido,
+                vezes=c.vezes,
+                situacao=c.situacao,
+                como=c.como,
+                especie_id=c.especie.id if c.especie else None,
+                nome_comum=c.especie.nome_comum if c.especie else None,
+                nome_cientifico=c.especie.nome_cientifico if c.especie else None,
+                variedade_de=base.nome_comum if base is not None else None,
+                candidatos=[
+                    CandidatoImportacao(
+                        id=e.id,
+                        nome_comum=e.nome_comum,
+                        nome_cientifico=e.nome_cientifico,
+                    )
+                    for e in c.candidatos
+                ],
+                sugestoes=c.sugestoes,
+            )
+        )
+
+    def quantos(situacao: str) -> int:
+        return sum(1 for i in itens if i.situacao == situacao)
+
+    return ImportacaoResponse(
+        total_linhas=len(nomes),
+        total_nomes=len(itens),
+        encontrados=quantos("encontrado"),
+        ambiguos=quantos("ambiguo"),
+        nao_encontrados=quantos("nao_encontrado"),
+        criados=quantos("criado"),
+        aplicado=aplicar,
+        gravacao=ResumoGravacao(**gravacao) if gravacao else None,
+        itens=itens,
+    )
+
+
 @router.get("/{especie_id}/imagem")
 def imagem_da_especie(
     especie_id: UUID,
@@ -566,14 +712,24 @@ def criar_especie(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    """Cadastro de espécie — restrito ao perfil dono."""
+    """Cadastro manual de espécie, no catálogo da própria loja.
+
+    A espécie nasce com dono. Antes da migração 012 não havia catálogo
+    por loja e tudo era global, então esta rota gravava `dono_id` nulo:
+    depois de 012, isso seria uma loja escrevendo no catálogo que todas
+    as outras enxergam. O caminho da importação já cria com dono, e
+    este passa a fazer o mesmo.
+
+    Promover uma espécie da loja para o catálogo curado é decisão de
+    quem mantém o AquaSys, e não acontece por aqui.
+    """
     if usuario.tipo != "dono":
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "Apenas o perfil empresarial pode cadastrar espécies",
         )
 
-    especie = Especie(**dados.model_dump())
+    especie = Especie(**dados.model_dump(), dono_id=usuario.id)
     db.add(especie)
     db.commit()
     db.refresh(especie)

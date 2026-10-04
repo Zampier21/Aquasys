@@ -114,6 +114,26 @@ class TestTeto:
         assert client.get("/clientes/plano", headers=cab_loja).json()["ativos"] == 0
         assert client.post("/clientes/", json=NOVO, headers=cab_loja).status_code == 201
 
+    def test_reativar_com_vaga_devolve_o_acesso(self, client, db, loja, cab_loja):
+        """O caminho que a tela de acessos usa para desfazer um desativar.
+
+        Sem ele o cadastro ficava no banco sem volta, e a loja precisava
+        criar tudo de novo, perdendo o vínculo com os aquários do cliente.
+        """
+        desativado = encher(db, loja, 1, ativos=False)[0]
+        assert client.get("/clientes/plano", headers=cab_loja).json()["ativos"] == 0
+
+        r = client.put(
+            f"/clientes/{desativado.id}", json={"ativo": True}, headers=cab_loja
+        )
+        assert r.status_code == 200
+        assert r.json()["ativo"] is True
+        assert client.get("/clientes/plano", headers=cab_loja).json()["ativos"] == 1
+
+        # E volta a aparecer na listagem normal, sem incluir_inativos.
+        nomes = [c["nome"] for c in client.get("/clientes/", headers=cab_loja).json()]
+        assert desativado.nome in nomes
+
     def test_reativar_com_plano_cheio_e_barrado(self, client, db, loja, cab_loja):
         """Sem isto o teto seria burlável: desativa, cria outro, reativa."""
         desativado = encher(db, loja, 1, ativos=False)[0]

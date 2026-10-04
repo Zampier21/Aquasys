@@ -50,6 +50,9 @@ class FichaManutencao(Base):
     agua_doce        = Column(Boolean, nullable=True)      # False = marinho
     observacoes      = Column(Text, nullable=True)
 
+    # RF010: arquivar a ficha em vez de apagá-la. A visita aconteceu, e o
+    # registro dela é o que permite comparar com o atendimento anterior.
+    ativo         = Column(Boolean, nullable=False, default=True)
     criado_em     = Column(DateTime, nullable=False, server_default=func.now())
     atualizado_em = Column(DateTime, nullable=True)
 

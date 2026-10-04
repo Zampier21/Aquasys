@@ -56,7 +56,34 @@ class Especie(Base):
     expectativa_vida_anos = Column(Integer)
     imagem_url  = Column(String(255))
     observacoes = Column(Text)
+
+    # ─── Dados vindos de fora ──────────────────────────
+    # Classificação climática da FishBase: tropical, subtropical,
+    # temperado e as demais. É categoria, e não substitui temp_min e
+    # temp_max. A faixa em graus que a FishBase publica é de
+    # sobrevivência na natureza, não de aquário: para o kinguio são 0 a
+    # 41 graus, que aprovaria um peixe de água fria num aquário de
+    # disco. Ver sql/013 e app/services/fishbase.py.
+    clima       = Column(String(15))
+    # Crédito da origem das medidas, exigido pela licença CC BY-NC da
+    # FishBase. Nulo quando a ficha foi preenchida à mão.
+    fonte_dados = Column(String(120))
     ativo       = Column(Boolean, nullable=False, default=True)
+
+    # ─── Origem e confiabilidade da ficha ──────────────
+    # Nulo é o catálogo curado do AquaSys, que toda loja enxerga. Com
+    # dono, a espécie foi criada pela importação daquela loja e só ela e
+    # os clientes dela a veem, até que o provedor a promova.
+    dono_id     = Column(
+        UUID(as_uuid=True),
+        ForeignKey("usuario.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    # Falso enquanto ninguém conferiu porte, comportamento e faixas. O
+    # motor de compatibilidade nunca libera espécie nessa condição: o
+    # preenchimento automático a partir do nome erra, e erra calado.
+    revisada    = Column(Boolean, nullable=False, default=True)
+
     criado_em   = Column(DateTime, nullable=False, server_default=func.now())
 
     # ─── Variedades ────────────────────────────────────
@@ -184,4 +211,37 @@ class AquarioEspecie(Base):
 
     __table_args__ = (
         UniqueConstraint("aquario_id", "especie_id", name="uq_aquario_especie"),
+    )
+
+class LojaEspecie(Base):
+    """Peixes que cada loja tem à venda.
+
+    Não confundir com `Especie.dono_id`, que diz quem CRIOU a ficha. Uma
+    loja vender Neon Tetra não a torna dona da espécie, que é do catálogo
+    curado. Por isso o estoque é uma tabela à parte, e não uma coluna.
+
+    A loja enxerga esta lista, e os clientes dela também: é o que
+    permite ao aquarista ver o que a sua loja tem antes de escolher.
+    """
+
+    __tablename__ = "loja_especie"
+
+    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    dono_id    = Column(
+        UUID(as_uuid=True),
+        ForeignKey("usuario.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    especie_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("especie.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # O nome como veio na planilha: é por ele que o lojista reconhece o
+    # item, e não pelo nome do catálogo.
+    nome_na_lista = Column(String(150))
+    criado_em     = Column(DateTime, nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("dono_id", "especie_id", name="uq_loja_especie"),
     )

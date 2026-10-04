@@ -11,6 +11,7 @@ from app.core.deps import get_usuario_atual
 from app.core.documento import formatar_documento, tipo_documento, somente_digitos
 from app.core.security import hash_senha, verificar_senha
 from app.database import get_db
+from app.schemas.base import Entrada
 from app.models.usuario import Usuario
 
 router = APIRouter()
@@ -35,17 +36,21 @@ class PerfilResponse(BaseModel):
     avatar: Optional[str] = None
 
 
-class PerfilUpdate(BaseModel):
+class PerfilUpdate(Entrada):
     nome: Optional[str] = Field(default=None, min_length=2, max_length=150)
     email: Optional[str] = Field(default=None, max_length=150)
 
 
-class SenhaUpdate(BaseModel):
+class SenhaUpdate(Entrada):
     senha_atual: str = Field(..., min_length=1)
     senha_nova: str = Field(..., min_length=6, max_length=100)
 
 
-class AvatarUpdate(BaseModel):
+class AvatarUpdate(Entrada):
+    # Sem teto no campo de propósito. Um `max_length` aqui faria o
+    # Pydantic recusar antes com um 422 genérico, e a rota deixaria de
+    # responder 413 dizendo qual é o limite em KB. O que impede o envio
+    # absurdo é o teto de corpo do middleware, bem antes disto.
     imagem: str = Field(..., min_length=1)
 
 

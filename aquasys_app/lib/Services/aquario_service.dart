@@ -2,7 +2,13 @@ import 'api.dart';
 
 /// Aquários do usuário logado.
 class AquarioService {
-  static Future<Map<String, dynamic>> listar() => Api.get('/aquarios/');
+  static Future<Map<String, dynamic>> listar({bool incluirExcluidos = false}) =>
+      Api.get('/aquarios/', query: {'incluir_excluidos': incluirExcluidos});
+
+  /// Desfaz a exclusão. O histórico de parâmetros e os alertas continuam
+  /// onde estavam: a exclusão só tirou o aquário das listas.
+  static Future<Map<String, dynamic>> restaurar(String id) =>
+      Api.post('/aquarios/$id/restaurar', esperado: 200);
 
   static Future<Map<String, dynamic>> criar({
     required String nome,

@@ -8,6 +8,18 @@ class PeixeService {
         if (busca != null && busca.trim().isNotEmpty) 'busca': busca.trim(),
       });
 
+  /// Confere uma lista de peixes em CSV contra o catálogo.
+  ///
+  /// Com `aplicar` falso devolve só o relatório. Com verdadeiro, grava:
+  /// o que casou entra no estoque da loja e o que faltava vira espécie
+  /// dela, marcada como não revisada.
+  static Future<Map<String, dynamic>> importarLista(
+    List<int> bytes, {
+    bool aplicar = false,
+  }) =>
+      Api.postArquivo('/peixes/importar', bytes,
+          query: {'aplicar': aplicar});
+
   /// Compatibilidade de todo o catálogo com um aquário.
   ///
   /// A API devolve uma lista; a tela consulta por espécie a cada card,

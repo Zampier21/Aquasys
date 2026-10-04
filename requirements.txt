@@ -16,7 +16,10 @@ pydantic-settings==2.15.0
 python-dotenv==1.2.2
 
 # Autenticação
-python-jose==3.5.0
+# PyJWT no lugar da python-jose: a jose exige a ecdsa, que tem falha de
+# canal lateral sem correção (PYSEC-2026-1325) e que o AquaSys nem usa,
+# porque assina com HS256.
+PyJWT==2.15.0
 passlib==1.7.4
 bcrypt==4.0.1
 
@@ -26,5 +29,15 @@ bcrypt==4.0.1
 Pillow==12.3.0
 httpx==0.28.1
 
+# Ficha dos peixes a partir do nome científico
+# A FishBase publica os snapshots em parquet; o pyarrow é o que lê. Só
+# as colunas usadas são projetadas na leitura, senão viriam as 102
+# colunas de `species` para a memória.
+pyarrow==25.0.1
+
 # Testes
 pytest==9.1.1
+
+# Auditoria de dependências — roda com:
+#   python -m pip_audit --requirement requirements.txt
+pip-audit==2.10.1

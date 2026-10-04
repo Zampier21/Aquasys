@@ -21,6 +21,9 @@ class Aquario(Base):
     temperatura   = Column(Float, nullable=False)
     ph            = Column(Float, nullable=False)
     tipo          = Column(String(20), nullable=True)
+    # Exclusão lógica: apagar a linha levaria junto, por CASCADE, todo o
+    # histórico de parâmetros, os testes de água e os alertas.
+    ativo         = Column(Boolean, nullable=False, default=True)
     criado_em     = Column(DateTime, nullable=False, server_default=func.now())
     atualizado_em = Column(DateTime, nullable=True)
 

@@ -160,14 +160,34 @@ class TestProgresso:
 
 
 class TestExclusao:
-    def test_loja_apaga_o_proprio_curso(self, client, cab_loja, curso_da_loja, db):
+    def test_excluir_tira_o_curso_da_lista(self, client, cab_loja, curso_da_loja, db):
         r = client.delete(f"/cursos/{curso_da_loja.id}", headers=cab_loja)
         assert r.status_code == 204
-        assert db.query(Curso).filter(Curso.id == curso_da_loja.id).first() is None
 
-    def test_apagar_o_curso_leva_as_aulas(self, client, cab_loja, curso_da_loja, db):
+        titulos = [c["titulo"] for c in client.get("/cursos/", headers=cab_loja).json()]
+        assert curso_da_loja.titulo not in titulos
+
+    def test_excluir_nao_apaga_as_aulas_nem_o_curso(
+        self, client, cab_loja, curso_da_loja, db
+    ):
+        """Exclusão lógica: apagar de verdade levaria o progresso dos alunos."""
         client.delete(f"/cursos/{curso_da_loja.id}", headers=cab_loja)
-        assert db.query(Aula).filter(Aula.curso_id == curso_da_loja.id).count() == 0
+        db.expire_all()
+
+        curso = db.query(Curso).filter(Curso.id == curso_da_loja.id).first()
+        assert curso is not None and curso.ativo is False
+        assert db.query(Aula).filter(Aula.curso_id == curso_da_loja.id).count() > 0
+
+    def test_restaurar_devolve_o_curso_a_lista(
+        self, client, cab_loja, curso_da_loja, db
+    ):
+        client.delete(f"/cursos/{curso_da_loja.id}", headers=cab_loja)
+        assert client.post(
+            f"/cursos/{curso_da_loja.id}/restaurar", headers=cab_loja
+        ).status_code == 200
+
+        titulos = [c["titulo"] for c in client.get("/cursos/", headers=cab_loja).json()]
+        assert curso_da_loja.titulo in titulos
 
     def test_ninguem_apaga_curso_global(self, client, cab_loja, curso_global, db):
         # Conteúdo do AquaSys. Por isso a tela nem deixa marcar o card.

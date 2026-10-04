@@ -206,8 +206,10 @@ def remover_cliente_manutencao(
 # ═══════════════════════════════════════════════════════
 # HELPERS
 # ═══════════════════════════════════════════════════════
-def _buscar_ficha_do_dono(ficha_id: UUID, dono: Usuario, db: Session) -> FichaManutencao:
-    ficha = (
+def _buscar_ficha_do_dono(
+    ficha_id: UUID, dono: Usuario, db: Session, incluir_arquivadas: bool = False
+) -> FichaManutencao:
+    consulta = (
         db.query(FichaManutencao)
         .options(
             selectinload(FichaManutencao.equipamentos),
@@ -215,8 +217,10 @@ def _buscar_ficha_do_dono(ficha_id: UUID, dono: Usuario, db: Session) -> FichaMa
             selectinload(FichaManutencao.descricao),
         )
         .filter(FichaManutencao.id == ficha_id, FichaManutencao.dono_id == dono.id)
-        .first()
     )
+    if not incluir_arquivadas:
+        consulta = consulta.filter(FichaManutencao.ativo.is_(True))
+    ficha = consulta.first()
     if ficha is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -255,13 +259,17 @@ def _aplicar_filhos(ficha: FichaManutencao, dados) -> None:
 @router.get("/", response_model=List[FichaResumo])
 def listar_fichas(
     cliente: str | None = Query(default=None, description="Filtra pelo nome do cliente"),
+    arquivadas: bool = Query(default=False, description="Traz as arquivadas"),
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
     """Fichas da loja logada, da mais recente para a mais antiga."""
     dono = exigir_dono(usuario)
 
-    consulta = db.query(FichaManutencao).filter(FichaManutencao.dono_id == dono.id)
+    consulta = db.query(FichaManutencao).filter(
+        FichaManutencao.dono_id == dono.id,
+        FichaManutencao.ativo.is_(not arquivadas),
+    )
     if cliente:
         consulta = consulta.filter(FichaManutencao.nome_cliente.ilike(f"%{cliente}%"))
 
@@ -338,6 +346,13 @@ def editar_ficha(
         exclude_unset=True,
         exclude={"equipamentos", "testes", "descricao"},
     )
+
+    # Religar a ficha a outro cliente só vale se o cliente for da loja.
+    # Sem esta conferência, o identificador viria do corpo e apontaria
+    # para o cadastro de qualquer outra.
+    if campos.get("cliente_id") is not None:
+        _buscar_cliente(campos["cliente_id"], dono, db)
+
     for campo, valor in campos.items():
         setattr(ficha, campo, valor)
 
@@ -358,9 +373,33 @@ def excluir_ficha(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    """Exclui a ficha. Check-list, testes e descrição caem junto."""
+    """Arquiva a ficha, atendendo ao RF010.
+
+    Apagar a linha levaria junto o check-list, os testes e a descrição do
+    atendimento. Como a ficha é o registro de uma visita que aconteceu, e
+    é o que permite comparar com o atendimento anterior, ela sai da lista
+    mas continua no banco.
+    """
     dono = exigir_dono(usuario)
     ficha = _buscar_ficha_do_dono(ficha_id, dono, db)
-    db.delete(ficha)
+    ficha.ativo = False
+    ficha.atualizado_em = datetime.utcnow()
     db.commit()
     return None
+
+
+@router.post("/{ficha_id}/restaurar", response_model=FichaResponse)
+def restaurar_ficha(
+    ficha_id: UUID,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual),
+):
+    """Tira a ficha do arquivo e devolve à lista."""
+    dono = exigir_dono(usuario)
+    ficha = _buscar_ficha_do_dono(ficha_id, dono, db, incluir_arquivadas=True)
+    if not ficha.ativo:
+        ficha.ativo = True
+        ficha.atualizado_em = datetime.utcnow()
+        db.commit()
+        db.refresh(ficha)
+    return ficha

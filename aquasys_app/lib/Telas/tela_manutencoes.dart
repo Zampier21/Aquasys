@@ -12,7 +12,9 @@ class TelaManutencoes extends StatefulWidget {
 
 class _TelaManutencoesState extends State<TelaManutencoes> {
   List<Map<String, dynamic>> _fichas = [];
+  List<Map<String, dynamic>> _arquivadas = [];
   bool _carregando = true;
+  bool _verArquivadas = false;
   String? _erro;
 
   @override
@@ -27,15 +29,25 @@ class _TelaManutencoesState extends State<TelaManutencoes> {
       _erro = null;
     });
 
-    final resultado = await FichaService.listar();
+    final respostas = await Future.wait([
+      FichaService.listar(),
+      FichaService.listar(arquivadas: true),
+    ]);
     if (!mounted) return;
 
     setState(() {
       _carregando = false;
-      if (resultado['sucesso'] == true) {
-        _fichas = List<Map<String, dynamic>>.from(resultado['dados']);
+      final ativas = respostas[0];
+      final guardadas = respostas[1];
+
+      if (ativas['sucesso'] == true) {
+        _fichas = List<Map<String, dynamic>>.from(ativas['dados']);
+        _arquivadas = guardadas['sucesso'] == true
+            ? List<Map<String, dynamic>>.from(guardadas['dados'])
+            : [];
+        if (_arquivadas.isEmpty) _verArquivadas = false;
       } else {
-        _erro = resultado['erro'];
+        _erro = ativas['erro'];
       }
     });
   }
@@ -93,6 +105,7 @@ class _TelaManutencoesState extends State<TelaManutencoes> {
                 ],
               ),
             ),
+            _buildFiltro(),
             Expanded(child: _buildConteudo()),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
@@ -159,29 +172,41 @@ class _TelaManutencoesState extends State<TelaManutencoes> {
       );
     }
 
-    if (_fichas.isEmpty) {
+    final lista = _verArquivadas ? _arquivadas : _fichas;
+
+    if (lista.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(28),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.assignment_outlined,
-                  size: 48, color: AppTheme.textoFraco.withValues(alpha: 0.5)),
+              Icon(
+                _verArquivadas
+                    ? Icons.inventory_2_outlined
+                    : Icons.assignment_outlined,
+                size: 48,
+                color: AppTheme.textoFraco.withValues(alpha: 0.5),
+              ),
               const SizedBox(height: 12),
-              const Text(
-                'Nenhuma ficha registrada',
-                style: TextStyle(
+              Text(
+                _verArquivadas
+                    ? 'Nenhuma ficha arquivada'
+                    : 'Nenhuma ficha registrada',
+                style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                   color: AppTheme.azulMedio,
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
-                'Cada atendimento de manutenção gera uma ficha técnica',
+              Text(
+                _verArquivadas
+                    ? 'As fichas que você arquivar ficam aqui e podem voltar'
+                    : 'Cada atendimento de manutenção gera uma ficha técnica',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: AppTheme.textoFraco),
+                style: const TextStyle(
+                    fontSize: 13, color: AppTheme.textoFraco),
               ),
             ],
           ),
@@ -194,29 +219,111 @@ class _TelaManutencoesState extends State<TelaManutencoes> {
       onRefresh: _carregar,
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-        itemCount: _fichas.length,
+        itemCount: lista.length,
         separatorBuilder: (_, _) => const SizedBox(height: 12),
         itemBuilder: (_, i) {
-          final ficha = _fichas[i];
+          final ficha = lista[i];
           final subtitulo = _subtitulo(ficha);
 
           return LinhaLista(
-            icone: const Icon(Icons.person_rounded,
-                color: AppTheme.white, size: 22),
+            icone: Icon(
+              _verArquivadas
+                  ? Icons.inventory_2_outlined
+                  : Icons.person_rounded,
+              color: AppTheme.white,
+              size: 22,
+            ),
             titulo: ficha['nome_cliente'] ?? '',
             subtitulo: subtitulo.isEmpty ? null : subtitulo,
             onTap: () => _abrirFicha(id: ficha['id']),
             acoes: [
-              IconButton(
-                icon: const Icon(Icons.delete_outline_rounded,
-                    color: AppTheme.error, size: 20),
-                onPressed: () => _confirmarExclusao(ficha),
-              ),
+              _verArquivadas
+                  ? IconButton(
+                      icon: const Icon(Icons.restart_alt_rounded,
+                          color: AppTheme.sucesso, size: 20),
+                      tooltip: 'Restaurar',
+                      onPressed: () => _restaurar(ficha),
+                    )
+                  : IconButton(
+                      icon: const Icon(Icons.inventory_2_outlined,
+                          color: AppTheme.alerta, size: 20),
+                      tooltip: 'Arquivar',
+                      onPressed: () => _confirmarExclusao(ficha),
+                    ),
             ],
           );
         },
       ),
     );
+  }
+
+  /// Abas de ativas e arquivadas, que só aparecem quando há arquivo.
+  Widget _buildFiltro() {
+    if (_carregando || _erro != null) return const SizedBox.shrink();
+    if (_arquivadas.isEmpty && !_verArquivadas) return const SizedBox.shrink();
+
+    Widget aba(String rotulo, int quantos, bool arquivadas) {
+      final selecionada = _verArquivadas == arquivadas;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => setState(() => _verArquivadas = arquivadas),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            decoration: BoxDecoration(
+              color: selecionada ? AppTheme.white : Colors.transparent,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: selecionada ? AppTheme.bordaCampo : Colors.transparent,
+              ),
+            ),
+            child: Text(
+              '$rotulo ($quantos)',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: selecionada ? AppTheme.azulMedio : AppTheme.textoFraco,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: AppTheme.superficieSuave,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            aba('Fichas', _fichas.length, false),
+            aba('Arquivadas', _arquivadas.length, true),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _restaurar(Map<String, dynamic> ficha) async {
+    final resultado = await FichaService.restaurar(ficha['id']);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(resultado['sucesso'] == true
+            ? 'Ficha de ${ficha['nome_cliente']} restaurada'
+            : resultado['erro'] ?? 'Erro ao restaurar'),
+        backgroundColor: resultado['sucesso'] == true
+            ? AppTheme.primaria
+            : AppTheme.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    if (resultado['sucesso'] == true) _carregar();
   }
 
   void _confirmarExclusao(Map<String, dynamic> ficha) {
@@ -234,7 +341,9 @@ class _TelaManutencoesState extends State<TelaManutencoes> {
           ),
         ),
         content: Text(
-          'A ficha de ${ficha['nome_cliente']} será apagada. Não dá para desfazer.',
+          'A ficha de ${ficha['nome_cliente']} sai da lista e vai para o '
+          'arquivo. O atendimento continua registrado, e dá para '
+          'restaurar pela aba "Arquivadas".',
           style: TextStyle(fontSize: 14, color: Colors.black.withValues(alpha: 0.65)),
         ),
         actions: [
@@ -265,7 +374,7 @@ class _TelaManutencoesState extends State<TelaManutencoes> {
                 );
               }
             },
-            child: const Text('Excluir'),
+            child: const Text('Arquivar'),
           ),
         ],
       ),

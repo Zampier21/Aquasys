@@ -94,7 +94,17 @@ class _TelaAquariosState extends State<TelaAquarios> {
   List<Map<String, dynamic>> _aquarios = [];
   final Set<String> _abertos = {};
   bool _carregando = true;
+  bool _verExcluidos = false;
   String? _erro;
+
+  // A exclusão é lógica: o aquário sai da lista mas continua no banco,
+  // com o histórico de parâmetros e os alertas. Estas duas listas são o
+  // que separa a tela normal da aba de restauração.
+  List<Map<String, dynamic>> get _ativos =>
+      _aquarios.where((a) => a['ativo'] != false).toList();
+
+  List<Map<String, dynamic>> get _excluidos =>
+      _aquarios.where((a) => a['ativo'] == false).toList();
 
   @override
   void initState() {
@@ -109,13 +119,15 @@ class _TelaAquariosState extends State<TelaAquarios> {
       _erro = null;
     });
 
-    final resultado = await AquarioService.listar();
+    final resultado = await AquarioService.listar(incluirExcluidos: true);
     if (!mounted) return;
 
     setState(() {
       _carregando = false;
       if (resultado['sucesso'] == true) {
         _aquarios = List<Map<String, dynamic>>.from(resultado['dados']);
+        // Restaurar o último excluído esvazia a aba: volta para a lista.
+        if (_excluidos.isEmpty) _verExcluidos = false;
       } else {
         _erro = resultado['erro'];
       }
@@ -258,8 +270,9 @@ class _TelaAquariosState extends State<TelaAquarios> {
           ),
         ),
         content: Text(
-          'Tem certeza que deseja excluir o aquário "$nome"? '
-          'Todo o histórico de parâmetros será perdido.',
+          'O aquário "$nome" sai da lista, e o histórico de parâmetros '
+          'e os alertas continuam salvos. Dá para restaurar depois, pela '
+          'aba "Excluídos".',
           style: TextStyle(
             fontSize: 13.5,
             color: Colors.black.withValues(alpha: 0.65),
@@ -307,6 +320,7 @@ class _TelaAquariosState extends State<TelaAquarios> {
               child: CabecalhoUsuario(tipoUsuario: widget.tipoUsuario),
             ),
             _buildCardTitulo(),
+            _buildFiltro(),
             Expanded(child: _buildConteudo()),
           ],
         ),
@@ -323,7 +337,7 @@ class _TelaAquariosState extends State<TelaAquarios> {
   // CARD DE TÍTULO + CTA
   // ═══════════════════════════════════════════════════
   Widget _buildCardTitulo() {
-    final total = _aquarios.length;
+    final total = _ativos.length;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
       child: Container(
@@ -416,29 +430,37 @@ class _TelaAquariosState extends State<TelaAquarios> {
       );
     }
 
-    if (_aquarios.isEmpty) {
+    final lista = _verExcluidos ? _excluidos : _ativos;
+
+    if (lista.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.water_drop_outlined,
+              _verExcluidos
+                  ? Icons.restore_from_trash_rounded
+                  : Icons.water_drop_outlined,
               size: 56,
               color: AppTheme.hintCampo.withValues(alpha: 0.4),
             ),
             const SizedBox(height: 12),
-            const Text(
-              'Nenhum aquário cadastrado',
-              style: TextStyle(
+            Text(
+              _verExcluidos
+                  ? 'Nenhum aquário excluído'
+                  : 'Nenhum aquário cadastrado',
+              style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
                 color: AppTheme.tituloBemVindo,
               ),
             ),
             const SizedBox(height: 4),
-            const Text(
-              'Toque em "Novo" para cadastrar o primeiro',
-              style: TextStyle(fontSize: 13, color: AppTheme.hintCampo),
+            Text(
+              _verExcluidos
+                  ? 'O que você excluir aparece aqui e pode voltar'
+                  : 'Toque em "Novo" para cadastrar o primeiro',
+              style: const TextStyle(fontSize: 13, color: AppTheme.hintCampo),
             ),
           ],
         ),
@@ -450,10 +472,133 @@ class _TelaAquariosState extends State<TelaAquarios> {
       color: AppTheme.ctaEntrar,
       child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-        itemCount: _aquarios.length,
-        itemBuilder: (_, i) => _buildCard(_aquarios[i]),
+        itemCount: lista.length,
+        // O excluído aparece numa linha simples, e não no card inteiro:
+        // não faz sentido abrir parâmetros nem registrar medição em algo
+        // que está fora da lista. Ali só cabe trazer de volta.
+        itemBuilder: (_, i) => _verExcluidos
+            ? _buildLinhaExcluido(lista[i])
+            : _buildCard(lista[i]),
       ),
     );
+  }
+
+  /// Abas de ativos e excluídos, que só aparecem quando há o que restaurar.
+  Widget _buildFiltro() {
+    if (_carregando || _erro != null) return const SizedBox.shrink();
+    if (_excluidos.isEmpty && !_verExcluidos) return const SizedBox.shrink();
+
+    Widget aba(String rotulo, int quantos, bool excluidos) {
+      final selecionada = _verExcluidos == excluidos;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => setState(() => _verExcluidos = excluidos),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            decoration: BoxDecoration(
+              color: selecionada ? AppTheme.white : Colors.transparent,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: selecionada ? AppTheme.bordaCampo : Colors.transparent,
+              ),
+            ),
+            child: Text(
+              '$rotulo ($quantos)',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: selecionada ? AppTheme.azulMedio : AppTheme.textoFraco,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: AppTheme.superficieSuave,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            aba('Meus aquários', _ativos.length, false),
+            aba('Excluídos', _excluidos.length, true),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLinhaExcluido(Map<String, dynamic> aquario) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppTheme.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.bordaCard),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.water_drop_outlined,
+                size: 22, color: AppTheme.textoFraco.withValues(alpha: 0.6)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    aquario['nome'] ?? '',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.azulMedio,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${aquario['volume_litros']} L, histórico preservado',
+                    style: const TextStyle(
+                        fontSize: 12.5, color: AppTheme.textoFraco),
+                  ),
+                ],
+              ),
+            ),
+            TextButton.icon(
+              onPressed: () => _restaurar(aquario),
+              icon: const Icon(Icons.restart_alt_rounded,
+                  size: 18, color: AppTheme.sucesso),
+              label: const Text(
+                'Restaurar',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.sucesso,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _restaurar(Map<String, dynamic> aquario) async {
+    final resultado = await AquarioService.restaurar(aquario['id']);
+    if (!mounted) return;
+
+    if (resultado['sucesso'] == true) {
+      _aviso('Aquário "${aquario['nome']}" restaurado');
+      await _carregar();
+    } else {
+      _aviso(resultado['erro'] ?? 'Erro ao restaurar', erro: true);
+    }
   }
 
   // ═══════════════════════════════════════════════════

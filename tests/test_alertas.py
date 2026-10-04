@@ -62,13 +62,30 @@ class TestCicloDoAlerta:
         client.put(f"/aquarios/{aquario['id']}", json={"ph": 7.4}, headers=cab_loja)
         assert len(client.get("/painel/", headers=cab_loja).json()["alertas"]) == 1
 
-    def test_apagar_o_aquario_leva_os_alertas(self, client, cab_loja, db):
+    def test_excluir_o_aquario_tira_os_alertas_do_painel(self, client, cab_loja, db):
+        """O alerta some da tela, mas a linha fica: a exclusão é desfazível."""
         aquario = criar(client, cab_loja, ph=7.3)
+        assert client.get("/painel/", headers=cab_loja).json()["alertas"]
+
         client.delete(f"/aquarios/{aquario['id']}", headers=cab_loja)
 
+        painel = client.get("/painel/", headers=cab_loja).json()
+        assert painel["alertas"] == []
+        assert painel["total_aquarios"] == 0
         assert db.query(Alerta).filter(
             Alerta.aquario_id == aquario["id"]
-        ).count() == 0
+        ).count() > 0
+
+    def test_restaurar_o_aquario_devolve_o_historico(self, client, cab_loja):
+        aquario = criar(client, cab_loja, ph=7.3)
+        client.delete(f"/aquarios/{aquario['id']}", headers=cab_loja)
+        assert client.post(
+            f"/aquarios/{aquario['id']}/restaurar", headers=cab_loja
+        ).status_code == 200
+
+        painel = client.get("/painel/", headers=cab_loja).json()
+        assert painel["total_aquarios"] == 1
+        assert len(painel["alertas"]) == 1
 
 
 class TestAlertaRespeitaOTipo:
@@ -264,3 +281,60 @@ class TestPovoarRecalculaOAlerta:
         )
         # Sem peixes, volta a valer a faixa do comunitário.
         assert len(client.get("/painel/", headers=cab_loja).json()["alertas"]) == 1
+
+
+class TestExclusaoLogica:
+    """Excluir tira das listas e preserva o histórico."""
+
+    def test_o_excluido_some_da_lista_normal(self, client, cab_loja):
+        aquario = criar(client, cab_loja, nome="Sala", ph=7.0)
+        client.delete(f"/aquarios/{aquario['id']}", headers=cab_loja)
+
+        nomes = [a["nome"] for a in client.get("/aquarios/", headers=cab_loja).json()]
+        assert "Sala" not in nomes
+
+    def test_a_resposta_diz_se_esta_ativo(self, client, cab_loja):
+        """O app separa as abas por este campo; sem ele, nada funciona."""
+        aquario = criar(client, cab_loja, nome="Sala", ph=7.0)
+        (vivo,) = client.get("/aquarios/", headers=cab_loja).json()
+        assert vivo["ativo"] is True
+
+        client.delete(f"/aquarios/{aquario['id']}", headers=cab_loja)
+        todos = client.get(
+            "/aquarios/", params={"incluir_excluidos": True}, headers=cab_loja
+        ).json()
+        assert [a["ativo"] for a in todos] == [False]
+
+    def test_restaurar_devolve_o_aquario_e_as_medicoes(self, client, cab_loja):
+        aquario = criar(client, cab_loja, nome="Sala", ph=7.2)
+        client.post(
+            f"/aquarios/{aquario['id']}/parametros",
+            json={"amonia_ppm": 0.1, "nitrito_ppm": 0, "nitrato_ppm": 5},
+            headers=cab_loja,
+        )
+        client.delete(f"/aquarios/{aquario['id']}", headers=cab_loja)
+
+        r = client.post(f"/aquarios/{aquario['id']}/restaurar", headers=cab_loja)
+        assert r.status_code == 200
+        assert r.json()["ativo"] is True
+
+        historico = client.get(
+            f"/aquarios/{aquario['id']}/parametros", headers=cab_loja
+        ).json()
+        assert len(historico) >= 1
+
+    def test_o_excluido_nao_aceita_peixe_nem_medicao(self, client, cab_loja):
+        aquario = criar(client, cab_loja, ph=7.0)
+        client.delete(f"/aquarios/{aquario['id']}", headers=cab_loja)
+
+        r = client.get(f"/peixes/aquario/{aquario['id']}", headers=cab_loja)
+        assert r.status_code == 404
+
+    def test_uma_loja_nao_restaura_o_aquario_da_outra(
+        self, client, cab_loja, cab_outra_loja
+    ):
+        aquario = criar(client, cab_loja, ph=7.0)
+        client.delete(f"/aquarios/{aquario['id']}", headers=cab_loja)
+        assert client.post(
+            f"/aquarios/{aquario['id']}/restaurar", headers=cab_outra_loja
+        ).status_code == 404

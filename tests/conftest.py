@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
+from app.core import limitador
 from app.core.config import settings
 from app.core.security import hash_senha
 from app.database import Base, get_db
@@ -34,12 +35,9 @@ def engine():
         con.execute(text(f'CREATE DATABASE "{NOME_TESTE}"'))
 
     motor = create_engine(URL_TESTE)
-    # A busca do catálogo compara sem acento, por unaccent(). A extensão
-    # existe no banco de produção; num banco recém-criado, não. Sem ela o
-    # teste de busca falharia por causa do ambiente, e não do código.
-    with motor.connect() as con:
-        con.execute(text("CREATE EXTENSION IF NOT EXISTS unaccent"))
-        con.commit()
+    # Não há extensão a instalar. A busca do catálogo compara sem acento
+    # por `translate`, que é função embutida: o banco de teste sobe com
+    # o esquema e nada mais. Ver `_sem_acento` em app/routers/peixes.py.
     Base.metadata.create_all(bind=motor)
 
     yield motor
@@ -67,6 +65,28 @@ def db(engine):
     sessao.close()
     transacao.rollback()
     conexao.close()
+
+
+@pytest.fixture(autouse=True)
+def sem_limite_de_requisicoes():
+    """Desliga o teto de requisições no resto da suíte.
+
+    Toda fixture de cabeçalho faz um login, e há centenas de testes
+    vindos do mesmo endereço. Com o limitador ligado a suíte se
+    autobloquearia, e a falha não diria nada sobre o código.
+
+    Quem prova que o limitador funciona é o `tests/test_seguranca.py`,
+    que o religa dentro do próprio caso. O padrão da aplicação segue
+    sendo ligado: é aqui que se desliga, e não lá.
+    """
+    anterior = settings.RATE_LIMIT_ATIVO
+    settings.RATE_LIMIT_ATIVO = False
+    limitador.zerar_tudo()
+
+    yield
+
+    settings.RATE_LIMIT_ATIVO = anterior
+    limitador.zerar_tudo()
 
 
 @pytest.fixture

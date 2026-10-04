@@ -13,12 +13,58 @@ class Api {
   }) =>
       _enviar('GET', rota, query: query);
 
+  /// O padrão é 201, que é o que as rotas de criação devolvem. As de
+  /// ação sobre algo que já existe, como restaurar, respondem 200.
   static Future<Map<String, dynamic>> post(
     String rota, {
     Object? corpo,
     Map<String, dynamic>? query,
+    int esperado = 201,
   }) =>
-      _enviar('POST', rota, corpo: corpo, query: query, esperado: 201);
+      _enviar('POST', rota, corpo: corpo, query: query, esperado: esperado);
+
+  /// POST de um arquivo, com os bytes como corpo e sem envelope.
+  ///
+  /// A rota de importação recebe o CSV cru: é o servidor que descobre a
+  /// codificação, porque o Excel brasileiro grava de três jeitos e o
+  /// aplicativo não tem como adivinhar melhor do que ele.
+  static Future<Map<String, dynamic>> postArquivo(
+    String rota,
+    List<int> bytes, {
+    String tipo = 'text/csv',
+    Map<String, dynamic>? query,
+  }) async {
+    try {
+      final cabecalhos = await AuthService.headers();
+      cabecalhos['Content-Type'] = tipo;
+
+      var uri = Uri.parse('$baseUrl$rota');
+      if (query != null && query.isNotEmpty) {
+        uri = uri.replace(
+          queryParameters: {
+            for (final e in query.entries)
+              if (e.value != null) e.key: '${e.value}',
+          },
+        );
+      }
+
+      final resposta = await http.post(
+        uri,
+        headers: cabecalhos,
+        body: bytes,
+      );
+
+      if (resposta.statusCode != 200) {
+        return {'sucesso': false, 'erro': _traduzirErro(resposta)};
+      }
+      return {
+        'sucesso': true,
+        'dados': jsonDecode(utf8.decode(resposta.bodyBytes)),
+      };
+    } catch (_) {
+      return {'sucesso': false, 'erro': 'Sem conexão com o servidor.'};
+    }
+  }
 
   static Future<Map<String, dynamic>> put(String rota, {Object? corpo}) =>
       _enviar('PUT', rota, corpo: corpo);

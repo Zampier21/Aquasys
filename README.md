@@ -98,6 +98,13 @@ Gere a chave com:
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
+O `.env.example` traz também os ajustes de segurança (CORS, HTTPS,
+limite de requisições, documentação aberta). Os padrões são os de
+desenvolvimento; o que muda antes de publicar está em
+[`docs/seguranca.md`](docs/seguranca.md), com a lista de conferência no
+fim. Com `AMBIENTE=producao`, a API confere a configuração sozinha e se
+recusa a subir com chave de exemplo, `DEBUG` ligado ou CORS aberto.
+
 Monte o esquema:
 
 ```bash
@@ -116,10 +123,19 @@ pessoa física entra como cliente de uma loja, não como assinante.
 Suba a API:
 
 ```bash
-uvicorn app.main:app --reload
+venv\Scripts\python.exe -m uvicorn app.main:app --reload
 ```
 
 A documentação interativa fica em <http://127.0.0.1:8000/docs>.
+
+> **No Windows, chame sempre pelo `python -m`.** O `pip` gera atalhos
+> `.exe` em `venv\Scripts\` (`uvicorn.exe`, `pytest.exe`, `pip.exe`) na
+> hora da instalação, sem assinatura, e o Controle de Aplicativo do
+> Windows 11 recusa binário não assinado recém-criado: "Uma política de
+> Controle de Aplicativo bloqueou este arquivo". O `python.exe` é
+> assinado e passa, então `python -m uvicorn` roda o mesmo programa sem
+> tocar no atalho barrado. Vale para `python -m pytest` e
+> `python -m pip` também.
 
 ### 3. Aplicativo
 
@@ -141,7 +157,7 @@ aparelho** — não para o seu computador. São dois ajustes:
 **A API precisa aceitar conexão de fora:**
 
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 **O app precisa saber o IP da sua máquina** (descubra com `ipconfig`):

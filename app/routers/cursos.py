@@ -279,10 +279,31 @@ def excluir_curso(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
+    """Exclusão lógica: o curso sai das listas e o progresso permanece.
+
+    Apagar a linha levaria junto as aulas e, com elas, o progresso de
+    cada aluno que já tinha assistido. A coluna `ativo` já existia e já
+    era filtrada na listagem; faltava usá-la aqui.
+    """
     curso = _buscar_curso_da_loja(curso_id, usuario, db)
-    db.delete(curso)
+    curso.ativo = False
     db.commit()
     return None
+
+
+@router.post("/{curso_id}/restaurar")
+def restaurar_curso(
+    curso_id: UUID,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual),
+):
+    """Devolve o curso às listas, com as aulas e o progresso intactos."""
+    curso = _buscar_curso_da_loja(curso_id, usuario, db)
+    if not curso.ativo:
+        curso.ativo = True
+        db.commit()
+        db.refresh(curso)
+    return detalhar_curso(curso.id, db, usuario)
 
 
 # ═══════════════════════════════════════════════════════

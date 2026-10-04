@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../Tema/app_tema.dart';
+import 'tela_importar_peixes.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/cabecalho_usuario.dart';
 import '../widgets/foto_especie.dart';
@@ -329,26 +330,60 @@ class _TelaPeixesState extends State<TelaPeixes> {
   }
 
   Widget _buildBusca() {
+    final campo = TextField(
+      controller: _buscaCtrl,
+      onChanged: _buscar,
+      style: const TextStyle(fontSize: 14, color: AppTheme.textDark),
+      decoration: InputDecoration(
+        hintText: 'Buscar peixe...',
+        prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.hintCampo, size: 21),
+        suffixIcon: _busca.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.close_rounded, size: 18, color: AppTheme.hintCampo),
+                onPressed: () {
+                  _buscaCtrl.clear();
+                  _buscar('');
+                },
+              ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      ),
+    );
+
+    // Conferir a lista de estoque é tarefa de quem vende, não de quem
+    // tem o aquário: o botão só existe na conta da loja.
+    if (widget.tipoUsuario != 'dono') {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+        child: campo,
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-      child: TextField(
-        controller: _buscaCtrl,
-        onChanged: _buscar,
-        style: const TextStyle(fontSize: 14, color: AppTheme.textDark),
-        decoration: InputDecoration(
-          hintText: 'Buscar peixe...',
-          prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.hintCampo, size: 21),
-          suffixIcon: _busca.isEmpty
-              ? null
-              : IconButton(
-                  icon: const Icon(Icons.close_rounded, size: 18, color: AppTheme.hintCampo),
-                  onPressed: () {
-                    _buscaCtrl.clear();
-                    _buscar('');
-                  },
+      child: Row(
+        children: [
+          Expanded(child: campo),
+          const SizedBox(width: 10),
+          Material(
+            color: AppTheme.superficieSuave,
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const TelaImportarPeixes(),
                 ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        ),
+              ),
+              child: const Padding(
+                padding: EdgeInsets.all(13),
+                child: Icon(Icons.upload_file_rounded,
+                    size: 22, color: AppTheme.primaria),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -971,6 +1006,8 @@ class _TelaPeixesState extends State<TelaPeixes> {
                     ],
                   ),
 
+                  _buildCredito(e),
+
                   if (e['observacoes'] != null &&
                       e['observacoes'].toString().isNotEmpty) ...[
                     const SizedBox(height: 12),
@@ -1030,6 +1067,63 @@ class _TelaPeixesState extends State<TelaPeixes> {
   }
 
   /// Faixa horizontal com a base e cada variedade dela.
+  static const Map<String, String> _climas = {
+    'tropical': 'Tropical',
+    'subtropical': 'Subtropical',
+    'temperado': 'Temperado',
+    'boreal': 'Boreal',
+    'polar': 'Polar',
+    'altitude': 'Altitude',
+    'agua_profunda': 'Água profunda',
+  };
+
+  /// Clima da espécie e crédito de quem publicou as medidas.
+  ///
+  /// O crédito não é cortesia: as medidas importadas vêm da FishBase,
+  /// cuja licença CC BY-NC exige atribuição onde o dado aparecer. Some
+  /// da tela quando a ficha foi preenchida à mão, que é quando não há
+  /// o que atribuir.
+  ///
+  /// O clima aparece junto porque é o que existe no lugar da faixa de
+  /// temperatura nas fichas recém-importadas: a FishBase publica a
+  /// faixa de sobrevivência na natureza, que para o kinguio vai de 0 a
+  /// 41 graus, e aquilo não serve como recomendação de aquário.
+  Widget _buildCredito(Map<String, dynamic> e) {
+    final clima = _climas[e['clima']?.toString()];
+    final fonte = e['fonte_dados']?.toString();
+    final temFonte = fonte != null && fonte.isNotEmpty;
+
+    if (clima == null && !temFonte) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            clima != null ? Icons.public_rounded : Icons.menu_book_rounded,
+            size: 14,
+            color: AppTheme.textoFraco,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              [
+                if (clima != null) 'Clima: $clima',
+                if (temFonte) 'Medidas de $fonte',
+              ].join('  ·  '),
+              style: const TextStyle(
+                fontSize: 11.5,
+                color: AppTheme.textoFraco,
+                height: 1.3,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildVariedades(Map<String, dynamic> e, Color cor) {
     final base = e['id'].toString();
     final escolhida = _variedadeEscolhida[base];

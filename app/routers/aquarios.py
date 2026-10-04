@@ -34,6 +34,7 @@ def _montar_resposta(aquario: Aquario) -> AquarioResponse:
         temperatura=aquario.temperatura,
         ph=aquario.ph,
         tipo=aquario.tipo,
+        ativo=aquario.ativo,
         amonia_ppm=ultima_medicao.amonia_ppm if ultima_medicao else 0,
         nitrito_ppm=ultima_medicao.nitrito_ppm if ultima_medicao else 0,
         nitrato_ppm=ultima_medicao.nitrato_ppm if ultima_medicao else 0,
@@ -47,13 +48,14 @@ def _montar_resposta(aquario: Aquario) -> AquarioResponse:
 
 
 def _buscar_aquario_do_usuario(
-    aquario_id: UUID, usuario: Usuario, db: Session
+    aquario_id: UUID, usuario: Usuario, db: Session, incluir_excluidos: bool = False
 ) -> Aquario:
-    aquario = (
-        db.query(Aquario)
-        .filter(Aquario.id == aquario_id, Aquario.usuario_id == usuario.id)
-        .first()
+    consulta = db.query(Aquario).filter(
+        Aquario.id == aquario_id, Aquario.usuario_id == usuario.id
     )
+    if not incluir_excluidos:
+        consulta = consulta.filter(Aquario.ativo.is_(True))
+    aquario = consulta.first()
     if aquario is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -87,17 +89,23 @@ def regerar_alertas(aquario: Aquario, db: Session) -> None:
 # ═══════════════════════════════════════════════════════
 @router.get("/", response_model=List[AquarioResponse])
 def listar_aquarios(
+    incluir_excluidos: bool = False,
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    """Lista todos os aquários do usuário logado."""
-    aquarios = (
+    """Lista os aquários do usuário logado.
+
+    Com `incluir_excluidos`, traz também os que foram excluídos, que é o
+    que alimenta a tela de restauração.
+    """
+    consulta = (
         db.query(Aquario)
         .options(selectinload(Aquario.habitantes))
         .filter(Aquario.usuario_id == usuario.id)
-        .order_by(Aquario.criado_em)
-        .all()
     )
+    if not incluir_excluidos:
+        consulta = consulta.filter(Aquario.ativo.is_(True))
+    aquarios = consulta.order_by(Aquario.criado_em).all()
     return [_montar_resposta(a) for a in aquarios]
 
 
@@ -214,11 +222,35 @@ def excluir_aquario(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    """Exclui o aquário. Parâmetros, histórico e alertas caem junto (CASCADE)."""
+    """Exclusão lógica: o aquário sai das listas e o histórico permanece.
+
+    Apagar a linha levaria junto, por CASCADE, os parâmetros registrados,
+    os testes de água e os alertas. Como não há como desfazer isso, o que
+    se faz aqui é marcar o aquário como inativo.
+    """
     aquario = _buscar_aquario_do_usuario(aquario_id, usuario, db)
-    db.delete(aquario)
+    aquario.ativo = False
+    aquario.atualizado_em = datetime.utcnow()
     db.commit()
     return None
+
+
+@router.post("/{aquario_id}/restaurar", response_model=AquarioResponse)
+def restaurar_aquario(
+    aquario_id: UUID,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual),
+):
+    """Desfaz a exclusão, com o histórico intacto."""
+    aquario = _buscar_aquario_do_usuario(
+        aquario_id, usuario, db, incluir_excluidos=True
+    )
+    if not aquario.ativo:
+        aquario.ativo = True
+        aquario.atualizado_em = datetime.utcnow()
+        db.commit()
+        db.refresh(aquario)
+    return _montar_resposta(aquario)
 
 
 # ═══════════════════════════════════════════════════════

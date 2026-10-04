@@ -1,0 +1,87 @@
+# Publicação da API do AquaSys no Render, no plano gratuito.
+#
+# O banco NÃO está declarado aqui de propósito. O Postgres gratuito do
+# Render expira 30 dias depois de criado e é apagado com os dados
+# dentro; para um teste que vai durar mais que um mês, isso é um prazo
+# de validade em cima do banco da loja. O banco fica no Neon, cujo
+# plano gratuito não expira, e entra por variável de ambiente.
+#
+# Para usar: no painel do Render, New > Blueprint, apontando para este
+# repositório. Os valores marcados com `sync: false` não vêm daqui e
+# são preenchidos à mão no painel — é o que impede que segredo caia no
+# git de novo.
+
+services:
+  - type: web
+    name: aquasys-api
+    runtime: python
+    plan: free
+    region: oregon
+    branch: main
+
+    # As migrações rodam na construção, e não na partida. O serviço
+    # gratuito hiberna e é religado a cada visita: migração no start
+    # rodaria a cada despertar, atrasando a primeira resposta e
+    # acordando o banco à toa.
+    buildCommand: pip install -r requirements.txt && python criar_tabelas.py
+
+    # Um processo só. É o que cabe na memória do plano gratuito e é
+    # também o que faz o limitador de requisições contar certo: a
+    # contagem dele vive na memória do processo.
+    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+
+    # Não toca no banco. É de propósito: o Render usa esta rota para
+    # saber se o serviço está de pé, e um health check que consultasse
+    # o Postgres manteria o banco acordado sem necessidade.
+    healthCheckPath: /health
+
+    envVars:
+      # ─── Preenchidos no painel ────────────────────────
+      # String de conexão do Neon, com ?sslmode=require no fim.
+      - key: DATABASE_URL
+        sync: false
+      # Gere com: python -c "import secrets; print(secrets.token_urlsafe(48))"
+      # Precisa ser diferente da chave que está no histórico do git.
+      - key: SECRET_KEY
+        sync: false
+      # Só o seed de cursos usa. Pode ficar vazia.
+      - key: YOUTUBE_API_KEY
+        sync: false
+
+      # ─── Origens do navegador ─────────────────────────
+      # Vazio enquanto o teste for pelo aplicativo Android. Se a versão
+      # web for publicada, aqui entra o endereço dela, exato e com
+      # https. Sem isso o navegador recusa as chamadas.
+      - key: CORS_ORIGENS
+        value: ""
+
+      # ─── Postura de produção ──────────────────────────
+      # Com 'producao' a API confere a própria configuração ao subir e
+      # se recusa a ligar se algo estiver aberto. A implantação falha
+      # em vez de ficar de pé insegura.
+      - key: AMBIENTE
+        value: producao
+      - key: DEBUG
+        value: "False"
+      - key: SQL_ECHO
+        value: "False"
+      - key: DOCS_PUBLICOS
+        value: "False"
+      - key: FORCAR_HTTPS
+        value: "True"
+      # O Render termina o TLS e repassa por proxy, então o endereço
+      # real do visitante vem no X-Forwarded-For. Sem isto ligado, o
+      # limitador veria todo mundo como o mesmo endereço.
+      - key: CONFIAR_NO_PROXY
+        value: "True"
+
+      - key: APP_NAME
+        value: AquaSys
+      - key: APP_VERSION
+        value: "1.0.0"
+
+      # Trava a versão do Python na mesma da máquina de
+      # desenvolvimento. O `.python-version` na raiz diz o mesmo; os
+      # dois juntos evitam surpresa quando o Render mudar o padrão.
+      - key: PYTHON_VERSION
+        value: 3.14.3
