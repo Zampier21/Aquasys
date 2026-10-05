@@ -41,6 +41,17 @@ configurada para reconectar sozinha quando ele dorme
 Meio giga de banco parece pouco, mas as fotos das espécies são o que
 pesa e são poucas dezenas. Sobra folga.
 
+**Sobre a memória, que foi medida.** A consulta à FishBase monta um
+índice de 35.731 espécies na memória do processo, e isso entrou no
+projeto depois deste roteiro. Medido com `tracemalloc`: o índice ocupa
+**25,6 MB**, com pico de **58 MB** durante a carga. Somado ao FastAPI,
+ao SQLAlchemy e ao pyarrow, cabe nos 512 MB com folga.
+
+O que vale saber é o efeito do hibernar: o índice morre com o processo,
+então a **primeira importação depois de cada despertar** baixa nove
+megabytes de novo e leva alguns segundos. Não atrapalha o uso normal,
+porque só a importação depende dele.
+
 ---
 
 ## 1. Banco no Neon
@@ -176,7 +187,18 @@ O endereço da API não está escrito no código: `lib/config.dart` o lê de
 `AQUASYS_API` no momento da compilação. Então é só compilar passando o
 novo endereço.
 
-### Android, que é o caminho mais curto
+> **Os dois caminhos funcionam nesta máquina.** Medido: `flutter build
+> web` em 66 segundos, `flutter build apk` em 28 segundos depois do
+> primeiro. O primeiro APK demora muito mais, porque baixa 4,3 GB de
+> Gradle; isso é uma vez só. O aviso do `flutter doctor` sobre
+> `cmdline-tools` não impede a compilação: aquilo serve ao `sdkmanager`
+> e à conferência de licença, e a licença que importa já está aceita.
+>
+> Escolha pelo que vai avaliar. O APK é o produto que o TCC descreve e
+> é onde a notificação local existe. O navegador dispensa instalação e
+> serve em iPhone, que não há como compilar aqui.
+
+### Android, que é o que o TCC descreve
 
 ```bash
 flutter build apk --release --dart-define=AQUASYS_API=https://aquasys-api.onrender.com
@@ -188,9 +210,9 @@ para mandar por WhatsApp ou Drive; quem for instalar precisa liberar
 
 Nada mais precisa ser feito: aplicativo nativo não passa por CORS.
 
-### Ou pelo navegador
+### Pelo navegador, que é o recomendado
 
-Se for mais fácil abrir num link do que instalar em cada celular:
+Um link, nada para instalar, e serve em Android e iPhone:
 
 ```bash
 flutter build web --release --dart-define=AQUASYS_API=https://aquasys-api.onrender.com
@@ -211,14 +233,61 @@ Sem isso o navegador recusa todas as chamadas, e o erro que aparece no
 console não diz "CORS" com todas as letras. Se o aplicativo abrir mas
 nada carregar, é isto.
 
-Uma ressalva sobre a versão web: no Flutter web o token fica no
-`localStorage`, que qualquer script na página consegue ler. Para um
-teste interno está bem; é mais uma razão para essa lista de origens
-ficar curta.
+A pasta pesa 42 MB, quase tudo do CanvasKit, que é o motor de desenho
+do Flutter. O navegador guarda em cache depois da primeira visita.
+
+**O que não funciona no navegador:** a notificação local. O
+`flutter_local_notifications` só existe em Android e iOS, e no
+navegador o `NotificacaoService` se desliga sozinho em vez de estourar.
+Então o RF011 não é observável num teste por link: o alerta aparece no
+painel, mas o lembrete agendado no aparelho, não. Vale dizer isso a
+quem avalia, para não registrarem como defeito.
+
+Outra ressalva: no Flutter web o token fica no `localStorage`, que
+qualquer script na página consegue ler. Para um teste interno está bem;
+é mais uma razão para essa lista de origens ficar curta.
 
 ---
 
-## 5. Manter acordado
+## 5. Preparar o ambiente para os testadores
+
+Servidor no ar não basta: o aplicativo precisa ter o que mostrar e as
+pessoas precisam de como entrar.
+
+**A conta da loja** é criada por linha de comando, e é ela que cria as
+demais:
+
+```powershell
+$env:DATABASE_URL="COLE_AQUI_A_URL_DO_NEON"; python criar_dono.py "Aqualife Ecossistemas" 11.222.333/0001-81 umaSenhaBoa
+```
+
+**As contas dos testadores** saem de dentro do aplicativo, entrando
+como a loja: aba Clientes, Acessos, e um acesso por pessoa. Vale um por
+testador, e não um compartilhado: aquário de um aparecendo na tela do
+outro atrapalha justamente o que se quer observar. O plano básico
+permite quinze acessos ativos.
+
+**O catálogo precisa estar cheio.** Com oito peixes, o motor de
+compatibilidade não tem o que mostrar, e é ele o centro do sistema.
+Importe o `estoque_aqualife.csv`, que tem 58 espécies conferidas, e
+revise as fichas pela tela de revisão. Vinte peixes revisados já
+sustentam uma sessão de teste.
+
+**Os cursos e as dicas** vêm dos seeds, e valem porque a aba Aprender
+vazia parece defeito:
+
+```powershell
+$env:DATABASE_URL="COLE_AQUI_A_URL_DO_NEON"; python seed_cursos.py; python seed_dicas.py
+```
+
+**O que avisar a quem testa:** que a primeira abertura do dia demora
+até um minuto, e que não é lentidão do sistema, é o servidor gratuito
+acordando. Sem esse aviso, a primeira anotação de todo mundo vai ser
+sobre desempenho, e o desempenho não é o que você quer avaliar.
+
+---
+
+## 6. Manter acordado
 
 O despertar de um minuto é o que mais atrapalha uma demonstração. Dá
 para evitar visitando a API de tempos em tempos, e a conta fecha:
@@ -248,7 +317,7 @@ trabalho para as horas úteis e sobra cota de sobra.
 
 ---
 
-## Durante o teste, fique de olho
+## 7. Durante o teste, fique de olho
 
 - **Horas de serviço no Render.** O painel mostra o consumo do mês. Ao
   esgotar as 750, o serviço é suspenso até o mês virar.

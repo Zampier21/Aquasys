@@ -32,6 +32,7 @@ toda ficha preenchida por aqui sai com `fonte_dados` gravado.
 
 import io
 import threading
+import time
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
@@ -43,6 +44,10 @@ ATRIBUICAO = f"FishBase {VERSAO} (CC BY-NC 4.0)"
 PAGINA = "https://www.fishbase.se/summary/{}.html"
 
 TEMPO_LIMITE = 60.0
+
+# Quantas vezes tentar baixar cada tabela antes de desistir.
+TENTATIVAS = 2
+ESPERA_ENTRE_TENTATIVAS = 2.0
 
 # Categorias de clima da FishBase, traduzidas para o padrão dos outros
 # enumerados da tabela especie.
@@ -74,7 +79,16 @@ class Indisponivel(Exception):
     """
 
 
-@dataclass
+# `slots=True` tira o dicionário de atributos de cada instância. São 35
+# mil instâncias vivas no índice, e o ganho medido foi modesto, de
+# 27,2 MB para 25,6 MB: aqui o peso está nas cadeias de texto, e não na
+# estrutura dos objetos. Fica porque não custa nada.
+#
+# O índice inteiro ocupa esses 25,6 MB, com pico de 58 MB durante a
+# carga, medido com tracemalloc. Cabe nos 512 MB do plano gratuito do
+# Render com folga, e foi medido antes de publicar justamente para não
+# descobrir isso com usuário na frente.
+@dataclass(slots=True)
 class Ficha:
     """O que a FishBase sabe e cabe na ficha do AquaSys."""
 
@@ -140,12 +154,25 @@ _trava = threading.Lock()
 def _baixar(tabela: str, colunas: list) -> list:
     import pyarrow.parquet as pq
 
-    try:
-        resposta = httpx.get(BASE + tabela + ".parquet",
-                             timeout=TEMPO_LIMITE, follow_redirects=True)
-        resposta.raise_for_status()
-    except httpx.HTTPError as erro:
-        raise Indisponivel(f"Falha ao buscar {tabela}: {erro}") from erro
+    # Duas tentativas. São dois arquivos de alguns megabytes, e queda no
+    # meio do segundo joga fora o primeiro: a importação perderia o
+    # preenchimento inteiro por causa de um soluço de rede. Aconteceu em
+    # teste, com EOF no meio do TLS.
+    ultimo = None
+    for tentativa in range(TENTATIVAS):
+        if tentativa:
+            time.sleep(ESPERA_ENTRE_TENTATIVAS)
+        try:
+            resposta = httpx.get(BASE + tabela + ".parquet",
+                                 timeout=TEMPO_LIMITE, follow_redirects=True)
+            resposta.raise_for_status()
+            break
+        except httpx.HTTPError as erro:
+            ultimo = erro
+    else:
+        raise Indisponivel(
+            f"Falha ao buscar {tabela} em {TENTATIVAS} tentativas: {ultimo}"
+        ) from ultimo
 
     try:
         tabela_arrow = pq.read_table(io.BytesIO(resposta.content),

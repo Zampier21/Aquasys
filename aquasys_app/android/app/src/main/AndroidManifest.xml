@@ -1,4 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- O aplicativo inteiro depende da API: sem isto nada funciona.
+         O Flutter injeta esta permissao nos manifestos de debug e de
+         profile, mas NAO no de release, e so aqui ela vale para o APK
+         distribuido. Conferido com `aapt2 dump badging`: antes desta
+         linha o APK de release saia sem ela, instalava, abria e
+         falhava em toda chamada de rede, dizendo "sem conexao com o
+         servidor" como se o problema fosse o servidor. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Lembretes diarios dos alertas de aquario (flutter_local_notifications).
          POST_NOTIFICATIONS e exigida a partir do Android 13; nas versoes
          anteriores a permissao ja vem concedida na instalacao. -->
@@ -7,7 +15,7 @@
          tudo que estava agendado se perde no boot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <application
-        android:label="aquasys_app"
+        android:label="AquaSys"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

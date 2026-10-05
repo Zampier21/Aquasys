@@ -19,6 +19,24 @@ class NotificacaoService {
 
   static bool _iniciado = false;
 
+  /// Se a plataforma atual tem notificação local.
+  ///
+  /// O `flutter_local_notifications` existe só em Android e iOS. No
+  /// Chrome e no Windows, que é como o sistema é demonstrado e como
+  /// vai ser testado por link, o plugin não responde e qualquer
+  /// chamada lança `MissingPluginException`.
+  ///
+  /// A guarda fica aqui, e não em cada chamador, porque era isso que
+  /// estava errado: o `main` protegia a inicialização com try/catch,
+  /// mas a tela inicial chamava `pedirPermissao` e `sincronizar` sem
+  /// proteção, e no navegador a exceção subia a cada carga do painel
+  /// que tivesse alerta. Quem chama não deveria precisar saber em que
+  /// plataforma está.
+  static bool get suportado =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
   /// Chamado quando o usuário toca na notificação.
   static void Function(String aquarioId)? aoTocar;
 
@@ -26,7 +44,7 @@ class NotificacaoService {
   // INICIALIZAÇÃO
   // ═══════════════════════════════════════════════════
   static Future<void> iniciar() async {
-    if (_iniciado) return;
+    if (!suportado || _iniciado) return;
 
 
     tzdata.initializeTimeZones();
@@ -56,6 +74,7 @@ class NotificacaoService {
   /// Pede autorização para notificar.
 
   static Future<bool> pedirPermissao() async {
+    if (!suportado) return false;
     await iniciar();
 
     if (defaultTargetPlatform == TargetPlatform.android) {
@@ -80,6 +99,7 @@ class NotificacaoService {
   /// Reflete no aparelho exatamente a lista de alertas recebida.
 
   static Future<void> sincronizar(List<dynamic> alertas) async {
+    if (!suportado) return;
     await iniciar();
     await _plugin.cancelAll();
 
@@ -121,12 +141,14 @@ class NotificacaoService {
 
   /// Remove todos os lembretes — usado no logout.
   static Future<void> limpar() async {
+    if (!suportado) return;
     await iniciar();
     await _plugin.cancelAll();
   }
 
   /// Quantos lembretes estão agendados. Serve para conferir em teste.
   static Future<int> agendados() async {
+    if (!suportado) return 0;
     await iniciar();
     final pendentes = await _plugin.pendingNotificationRequests();
     return pendentes.length;
