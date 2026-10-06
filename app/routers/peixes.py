@@ -103,8 +103,14 @@ _CACHE_DA_IMAGEM = "public, max-age=2592000"
 
 
 def _creditos_das_imagens(db: Session, ids=None) -> dict:
+    """{especie_id: (autor, licenca, hash)} de quem tem foto.
+
+    O hash entra para a URL da imagem poder mudar quando a foto muda.
+    Ver `_url_imagem`.
+    """
     consulta = db.query(
-        EspecieImagem.especie_id, EspecieImagem.autor, EspecieImagem.licenca
+        EspecieImagem.especie_id, EspecieImagem.autor,
+        EspecieImagem.licenca, EspecieImagem.hash,
     )
     if ids is not None:
         if not ids:
@@ -112,18 +118,23 @@ def _creditos_das_imagens(db: Session, ids=None) -> dict:
         consulta = consulta.filter(EspecieImagem.especie_id.in_(ids))
 
     return {
-        especie_id: (autor, licenca)
-        for especie_id, autor, licenca in consulta.all()
+        especie_id: (autor, licenca, marca)
+        for especie_id, autor, licenca, marca in consulta.all()
     }
 
 
-def _tem_imagem(especie_id, db: Session) -> bool:
-    return (
-        db.query(EspecieImagem.especie_id)
+def _marca_da_imagem(especie_id, db: Session) -> Optional[str]:
+    """Identidade da foto da espécie, ou None se ela não tem foto.
+
+    Serve de duas coisas ao mesmo tempo: dizer se existe foto, e dar à
+    URL o pedaço que muda quando a foto muda.
+    """
+    linha = (
+        db.query(EspecieImagem.hash)
         .filter(EspecieImagem.especie_id == especie_id)
         .first()
-        is not None
     )
+    return linha[0] if linha else None
 
 
 def _credito_em_texto(autor, licenca):
@@ -136,9 +147,23 @@ def _credito_em_texto(autor, licenca):
     return f"{autor} ({licenca})"
 
 
-def _url_imagem(especie_id, miniatura: bool = False) -> str:
-    sufixo = "?tamanho=miniatura" if miniatura else ""
-    return f"/peixes/{especie_id}/imagem{sufixo}"
+def _url_imagem(especie_id, miniatura: bool = False, marca=None) -> str:
+    """Endereço da foto, com a identidade dela dentro.
+
+    O `v` não é lido pela rota: existe para o endereço mudar quando a
+    foto muda. A resposta da imagem é guardada por trinta dias, e o
+    aplicativo guarda em disco também; sem isso, a loja trocaria a foto
+    de um peixe e continuaria vendo a antiga por um mês, sem entender
+    por quê.
+    """
+    partes = []
+    if miniatura:
+        partes.append("tamanho=miniatura")
+    if marca:
+        partes.append(f"v={marca[:12]}")
+
+    consulta = ("?" + "&".join(partes)) if partes else ""
+    return f"/peixes/{especie_id}/imagem{consulta}"
 
 
 def _montar_variedade(
@@ -152,9 +177,12 @@ def _montar_variedade(
     )
     credito = creditos.get(variedade.id)
     if credito is not None:
-        resumo.imagem = _url_imagem(variedade.id)
-        resumo.imagem_miniatura = _url_imagem(variedade.id, miniatura=True)
-        resumo.imagem_credito = _credito_em_texto(*credito)
+        autor, licenca, marca = credito
+        resumo.imagem = _url_imagem(variedade.id, marca=marca)
+        resumo.imagem_miniatura = _url_imagem(
+            variedade.id, miniatura=True, marca=marca
+        )
+        resumo.imagem_credito = _credito_em_texto(autor, licenca)
     return resumo
 
 
@@ -166,9 +194,12 @@ def _montar_especie(
 
     credito = creditos.get(especie.id)
     if credito is not None:
-        resposta.imagem = _url_imagem(especie.id)
-        resposta.imagem_miniatura = _url_imagem(especie.id, miniatura=True)
-        resposta.imagem_credito = _credito_em_texto(*credito)
+        autor, licenca, marca = credito
+        resposta.imagem = _url_imagem(especie.id, marca=marca)
+        resposta.imagem_miniatura = _url_imagem(
+            especie.id, miniatura=True, marca=marca
+        )
+        resposta.imagem_credito = _credito_em_texto(autor, licenca)
 
     # As variedades vêm de fora porque quem lista o catálogo já as
     # carregou em bloco, junto com os créditos das fotos — buscá-las
@@ -252,8 +283,13 @@ def _reavaliar(aquario, db: Session) -> None:
 
 
 def _montar_habitante(
-    item: AquarioEspecie, especie: Especie, tem_imagem: bool = False
+    item: AquarioEspecie, especie: Especie, marca: Optional[str] = None
 ) -> HabitanteResponse:
+    """Habitante do aquário. `marca` é a identidade da foto, ou None.
+
+    Antes era um booleano de "tem imagem". Virou a marca porque a URL
+    precisa dela para mudar quando a foto muda.
+    """
     return HabitanteResponse(
         id=item.id,
         especie_id=especie.id,
@@ -263,7 +299,8 @@ def _montar_habitante(
         tamanho_adulto_cm=especie.tamanho_adulto_cm,
         comportamento=especie.comportamento,
         imagem_miniatura=(
-            _url_imagem(especie.id, miniatura=True) if tem_imagem else None
+            _url_imagem(especie.id, miniatura=True, marca=marca)
+            if marca else None
         ),
         adicionado_em=item.adicionado_em,
     )
@@ -507,7 +544,10 @@ def listar_habitantes(
 
     com_foto = _creditos_das_imagens(db, [especie.id for _, especie in linhas])
     return [
-        _montar_habitante(item, especie, especie.id in com_foto)
+        _montar_habitante(
+            item, especie,
+            com_foto[especie.id][2] if especie.id in com_foto else None,
+        )
         for item, especie in linhas
     ]
 
@@ -582,7 +622,7 @@ def adicionar_ao_aquario(
     db.commit()
     db.refresh(item)
 
-    return _montar_habitante(item, especie, _tem_imagem(especie.id, db))
+    return _montar_habitante(item, especie, _marca_da_imagem(especie.id, db))
 
 
 @router.put("/aquario/{aquario_id}/{item_id}", response_model=HabitanteResponse)
@@ -612,7 +652,7 @@ def atualizar_quantidade(
     db.refresh(item)
 
     especie = _buscar_especie(item.especie_id, db)
-    return _montar_habitante(item, especie, _tem_imagem(especie.id, db))
+    return _montar_habitante(item, especie, _marca_da_imagem(especie.id, db))
 
 
 @router.delete("/aquario/{aquario_id}/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -816,6 +856,7 @@ def buscar_fotos(
 
     rodada = pendentes[:limite]
     baixadas, nao_encontradas = 0, []
+    fonte_fora = False
 
     cliente = svc_imagens._cliente()
     try:
@@ -829,10 +870,16 @@ def buscar_fotos(
                 resultado = svc_imagens.obter(
                     especie.nome_cientifico, especie.nome_comum, cliente
                 )
+            except svc_imagens.FonteIndisponivel as erro:
+                # A fonte recusou. Insistir nas próximas só gasta tempo
+                # e piora o bloqueio, e marcar as outras como "sem foto
+                # no acervo" seria mentira: nem chegamos a perguntar.
+                log.warning("Wikimedia indisponivel: %s", erro)
+                fonte_fora = True
+                break
             except Exception:
-                # O Commons às vezes devolve arquivo que não abre. Isso
-                # é dado de terceiro, não defeito daqui, e não derruba
-                # a rodada.
+                # Dado de terceiro estranho, de uma espécie só. Não
+                # derruba a rodada.
                 log.exception("falha ao buscar foto de %s", especie.nome_comum)
                 resultado = None
 
@@ -850,10 +897,13 @@ def buscar_fotos(
         cliente.close()
 
     return ResumoFotos(
-        tentadas=len(rodada),
+        # Só conta como tentada a que chegou a ser perguntada: se a
+        # fonte caiu na terceira, as duas seguintes não foram tentadas.
+        tentadas=baixadas + len(nao_encontradas),
         baixadas=baixadas,
         restantes=len(pendentes) - baixadas,
         nao_encontradas=nao_encontradas,
+        fonte_indisponivel=fonte_fora,
     )
 
 
@@ -998,3 +1048,85 @@ def revisar_especie(
     db.commit()
     db.refresh(especie)
     return especie
+
+
+@router.post("/{especie_id}/imagem", response_model=EspecieResponse)
+async def enviar_foto(
+    especie_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual),
+):
+    """Grava a foto que a loja tirou do peixe dela.
+
+    Vale mais que a do acervo livre, e não é questão de gentileza: o
+    guppy do Wikimedia é um peixe selvagem cinzento, e o que a loja
+    vende é uma variedade de cauda colorida. Quem compra quer ver o
+    que vai levar. Por isso esta foto, quando existe, não é
+    substituída pela busca automática — a busca só olha quem não tem
+    nenhuma.
+
+    O corpo é a imagem crua, sem envelope. O aplicativo já reduz antes
+    de enviar, porque foto de celular passa de 4 MB e o teto de corpo
+    da API é 2 MB; aqui ela é reduzida de novo, para as duas medidas
+    que o catálogo usa.
+    """
+    if usuario.tipo != "dono":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Apenas contas empresariais enviam foto de espécie",
+        )
+
+    especie = _minha_especie(especie_id, usuario, db)
+    bruto = await request.body()
+
+    if not bruto:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "Nenhuma imagem recebida"
+        )
+
+    try:
+        pronta = svc_imagens.preparar(bruto)
+    except svc_imagens.ImagemInvalida as erro:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"A imagem não pôde ser lida: {erro}",
+        )
+
+    # Crédito da própria loja. Sem licença, porque a foto é dela e não
+    # vem de acervo com exigência de atribuição.
+    svc_imagens.gravar(
+        db, especie, pronta,
+        svc_imagens.FotoEncontrada(
+            url="", fonte="Foto da loja", autor=usuario.nome,
+            licenca=None, licenca_url=None,
+        ),
+    )
+    db.commit()
+    db.refresh(especie)
+    return especie
+
+
+@router.delete("/{especie_id}/imagem", status_code=status.HTTP_204_NO_CONTENT)
+def remover_foto(
+    especie_id: UUID,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual),
+):
+    """Apaga a foto da espécie, para poder trocar ou buscar outra.
+
+    Depois disto a espécie volta a entrar na busca automática, que só
+    olha quem está sem foto.
+    """
+    if usuario.tipo != "dono":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Apenas contas empresariais removem foto de espécie",
+        )
+
+    _minha_especie(especie_id, usuario, db)
+    db.query(EspecieImagem).filter(
+        EspecieImagem.especie_id == especie_id
+    ).delete(synchronize_session=False)
+    db.commit()
+    return None

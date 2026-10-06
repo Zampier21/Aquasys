@@ -1,7 +1,12 @@
 name: aquasys_app
 description: "AquaSys — Sistema de Gerenciamento de Aquários"
 publish_to: 'none'
-version: 1.0.0+1
+# O numero depois do + e o versionCode do Android. Suba a cada APK
+# distribuido: e por ele que o aparelho decide se o arquivo e uma
+# atualizacao ou uma reinstalacao, e e como voce sabe qual build esta
+# na mao de cada testador. Mesmo numero instala, mas nao da para
+# distinguir; numero menor o Android recusa.
+version: 1.1.0+4
 
 environment:
   sdk: ^3.13.0

@@ -274,3 +274,84 @@ class TestNaRespostaDoCatalogo:
         catalogo = client.get("/peixes/", headers=cab_loja).json()
         com_foto = [e for e in catalogo if e["imagem_miniatura"]]
         assert com_foto[0]["imagem_credito"] == "Fulano (CC BY-SA 4.0)"
+
+
+# ═══════════════════════════════════════════════════════
+# QUANDO A FONTE RECUSA
+# ═══════════════════════════════════════════════════════
+class TestFonteForaDoAr:
+    """Recusa do Wikimedia não é "esta espécie não tem foto".
+
+    A distinção custou um diagnóstico errado de verdade: do Render, que
+    é endereço de datacenter, o Wikimedia recusou as consultas, e a tela
+    disse à loja que os peixes não estavam no acervo livre. A loja sairia
+    fotografando peixe à toa por causa de um 403.
+    """
+
+    @pytest.fixture
+    def fonte_caida(self, monkeypatch):
+        import httpx
+
+        monkeypatch.setattr(svc_imagens, "_cliente", lambda: _ClienteFalso())
+
+        def recusar(cientifico, comum=None, cliente=None):
+            raise svc_imagens.FonteIndisponivel("403 Forbidden")
+
+        monkeypatch.setattr(svc_imagens, "obter", recusar)
+
+    def test_avisa_que_a_fonte_caiu(
+        self, client, cab_loja, importadas, fonte_caida
+    ):
+        corpo = buscar(client, cab_loja).json()
+        assert corpo["fonte_indisponivel"] is True
+
+    def test_nao_marca_as_especies_como_sem_foto(
+        self, client, cab_loja, importadas, fonte_caida
+    ):
+        """Nem chegamos a perguntar por elas."""
+        corpo = buscar(client, cab_loja).json()
+
+        assert corpo["nao_encontradas"] == []
+        assert corpo["tentadas"] == 0
+        assert corpo["restantes"] == 3
+
+    def test_para_na_primeira_recusa(
+        self, client, cab_loja, importadas, monkeypatch
+    ):
+        """Insistir gasta tempo e piora o bloqueio."""
+        monkeypatch.setattr(svc_imagens, "_cliente", lambda: _ClienteFalso())
+        chamadas = []
+
+        def recusar(cientifico, comum=None, cliente=None):
+            chamadas.append(cientifico)
+            raise svc_imagens.FonteIndisponivel("429")
+
+        monkeypatch.setattr(svc_imagens, "obter", recusar)
+        buscar(client, cab_loja, limite=5)
+
+        assert len(chamadas) == 1
+
+    def test_o_que_baixou_antes_da_queda_fica(
+        self, client, cab_loja, importadas, db, monkeypatch
+    ):
+        monkeypatch.setattr(svc_imagens, "_cliente", lambda: _ClienteFalso())
+        vistas = []
+
+        def as_vezes(cientifico, comum=None, cliente=None):
+            vistas.append(cientifico)
+            if len(vistas) > 2:
+                raise svc_imagens.FonteIndisponivel("503")
+            return pronta(), achado()
+
+        monkeypatch.setattr(svc_imagens, "obter", as_vezes)
+        corpo = buscar(client, cab_loja).json()
+
+        assert corpo["baixadas"] == 2
+        assert corpo["fonte_indisponivel"] is True
+        assert db.query(EspecieImagem).count() == 2
+
+    def test_busca_normal_nao_marca_a_fonte_como_fora(
+        self, client, cab_loja, importadas, sem_rede
+    ):
+        corpo = buscar(client, cab_loja).json()
+        assert corpo["fonte_indisponivel"] is False

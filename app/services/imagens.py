@@ -42,6 +42,16 @@ class ImagemInvalida(Exception):
     """O arquivo baixado não é uma imagem que dê para usar."""
 
 
+class FonteIndisponivel(Exception):
+    """O Wikimedia recusou ou não respondeu.
+
+    Diferente de não achar foto, e a diferença importa: "esta espécie
+    não tem foto no acervo livre" manda a loja fotografar o peixe;
+    "a fonte nos recusou" é problema nosso e passa com o tempo. Sem
+    separar, a tela dizia a primeira coisa quando era a segunda.
+    """
+
+
 def preparar(bruto: bytes) -> ImagemPronta:
     try:
         original = Image.open(io.BytesIO(bruto))
@@ -108,7 +118,7 @@ COMMONS = "https://commons.wikimedia.org/w/api.php"
 # O Wikimedia pede que robôs se identifiquem e digam como falar com o
 # responsável. Ponha seu e-mail aqui antes de rodar em volume — sem isso
 # você é só mais um agente anônimo, e é quem eles limitam primeiro.
-CONTATO = "projeto academico AquaSys"
+CONTATO = "https://github.com/Zampier21/Aquasys"
 AGENTE = f"AquaSys/1.0 ({CONTATO}) python-httpx"
 
 # Licenças aceitas. Commons é quase todo livre, mas "quase" não serve
@@ -389,16 +399,27 @@ def obter(
     Não toca no banco de propósito: quem chama decide o que fazer com o
     resultado, e assim esta parte continua testável sem banco.
     """
-    achado = buscar(nome_cientifico, nome_comum, cliente=cliente)
+    try:
+        achado = buscar(nome_cientifico, nome_comum, cliente=cliente)
+    except httpx.HTTPError as erro:
+        # Recusa ou queda do Wikimedia não é "esta espécie não tem
+        # foto": é a fonte fora de alcance, e quem chama precisa saber
+        # da diferença para não mandar a loja fotografar à toa.
+        raise FonteIndisponivel(str(erro)) from erro
+
     if achado is None:
         return None
 
     try:
         bruto = baixar(achado.url, cliente=cliente)
+    except httpx.HTTPError as erro:
+        raise FonteIndisponivel(str(erro)) from erro
+
+    try:
         return preparar(bruto), achado
-    except (httpx.HTTPError, ImagemInvalida):
-        # Foto encontrada no catálogo mas ilegível ou fora do ar não é
-        # erro do sistema: é como não ter achado.
+    except ImagemInvalida:
+        # Arquivo encontrado mas ilegível é como não ter achado: a
+        # fonte respondeu, o conteúdo é que não serve.
         return None
 
 

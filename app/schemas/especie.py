@@ -171,6 +171,11 @@ class ResumoFotos(BaseModel):
     # precisar resolver à mão.
     nao_encontradas: List[str] = []
 
+    # Verdadeiro quando o Wikimedia recusou ou não respondeu. Separado
+    # de `nao_encontradas` de propósito: mandar a loja fotografar um
+    # peixe porque a fonte estava fora do ar é trabalho jogado fora.
+    fonte_indisponivel: bool = False
+
 
 class VariedadeResumo(BaseModel):
     """Uma variedade dentro do card da espécie-base.

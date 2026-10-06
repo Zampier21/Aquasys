@@ -20,6 +20,22 @@ class PeixeService {
       Api.postArquivo('/peixes/importar', bytes,
           query: {'aplicar': aplicar});
 
+  /// Envia a foto que a loja tirou do peixe.
+  ///
+  /// Vale mais que a do acervo livre e não é substituída pela busca
+  /// automática, que só olha espécie sem foto nenhuma. Os bytes vão
+  /// crus, sem envelope: o aplicativo já reduz antes de enviar, porque
+  /// foto de celular passa de 4 MB e o teto da API é 2 MB.
+  static Future<Map<String, dynamic>> enviarFoto(
+    String especieId,
+    List<int> bytes,
+  ) =>
+      Api.postArquivo('/peixes/$especieId/imagem', bytes, tipo: 'image/jpeg');
+
+  /// Apaga a foto, devolvendo a espécie para a busca automática.
+  static Future<Map<String, dynamic>> removerFoto(String especieId) =>
+      Api.delete('/peixes/$especieId/imagem');
+
   /// Procura foto para as espécies da loja que ainda não têm.
   ///
   /// Trabalha por rodadas, e não de uma vez: cada foto leva uns 3,5

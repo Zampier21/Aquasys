@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../Services/peixe_service.dart';
 import '../Tema/app_tema.dart';
+import '../widgets/foto_especie.dart';
 
 /// Revisão das fichas que a importação deixou pela metade.
 ///
@@ -35,8 +37,10 @@ class _TelaRevisarEspeciesState extends State<TelaRevisarEspecies> {
   // entre procurar no Commons, baixar e redimensionar. A tela mostra o
   // andamento em vez de ficar parada esperando.
   bool _buscandoFotos = false;
+  int _fotosTentadas = 0;
   int _fotosBaixadas = 0;
   int _fotosRestantes = 0;
+  bool _buscouFotos = false;
   final List<String> _semFoto = [];
 
   @override
@@ -72,7 +76,9 @@ class _TelaRevisarEspeciesState extends State<TelaRevisarEspecies> {
   Future<void> _buscarFotos() async {
     setState(() {
       _buscandoFotos = true;
+      _fotosTentadas = 0;
       _fotosBaixadas = 0;
+      _buscouFotos = true;
       _semFoto.clear();
     });
 
@@ -90,6 +96,7 @@ class _TelaRevisarEspeciesState extends State<TelaRevisarEspecies> {
 
       final d = r['dados'] as Map<String, dynamic>;
       setState(() {
+        _fotosTentadas += d['tentadas'] as int;
         _fotosBaixadas += d['baixadas'] as int;
         _fotosRestantes = d['restantes'] as int;
         _semFoto.addAll((d['nao_encontradas'] as List).cast<String>());
@@ -104,12 +111,21 @@ class _TelaRevisarEspeciesState extends State<TelaRevisarEspecies> {
     await _carregar();
 
     if (!mounted) return;
-    _avisar(
-      _fotosBaixadas == 0
-          ? 'Nenhuma foto nova encontrada.'
-          : '$_fotosBaixadas ${_fotosBaixadas == 1 ? "foto baixada" : "fotos baixadas"}.',
-      _fotosBaixadas == 0 ? AppTheme.alerta : AppTheme.sucesso,
-    );
+    // Três situações diferentes, e antes as três diziam a mesma coisa:
+    // "nenhuma foto encontrada". Sem distinguir, não dá para saber se o
+    // problema é a busca ou se simplesmente não havia o que buscar.
+    final String recado;
+    if (_fotosTentadas == 0) {
+      recado = 'Nenhuma espécie sua está sem foto.';
+    } else if (_fotosBaixadas == 0) {
+      recado = 'Tentei $_fotosTentadas, e nenhuma está no acervo livre.';
+    } else {
+      recado = '$_fotosBaixadas de $_fotosTentadas '
+          '${_fotosBaixadas == 1 ? "foto baixada" : "fotos baixadas"}.';
+    }
+
+    _avisar(recado,
+        _fotosBaixadas == 0 ? AppTheme.alerta : AppTheme.sucesso);
   }
 
   @override
@@ -301,6 +317,18 @@ class _TelaRevisarEspeciesState extends State<TelaRevisarEspecies> {
             side: const BorderSide(color: AppTheme.bordaCampo),
           ),
         ),
+        // O resultado fica na tela depois da busca, e não só no aviso
+        // que some em três segundos.
+        if (_buscouFotos)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'Última busca: $_fotosTentadas tentada(s), '
+              '$_fotosBaixadas baixada(s), $_fotosRestantes ainda sem foto.',
+              style: const TextStyle(
+                  fontSize: 11.5, color: AppTheme.textoFraco),
+            ),
+          ),
         if (_semFoto.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -483,6 +511,7 @@ class _FormularioState extends State<_Formulario> {
 
   bool _gravando = false;
   bool _carregando = true;
+  bool _mexendoNaFoto = false;
   String? _erro;
 
   /// Rótulos que ainda faltam, recalculados a cada digitação.
@@ -610,6 +639,189 @@ class _FormularioState extends State<_Formulario> {
     return double.tryParse(texto);
   }
 
+  // ─── Foto ───────────────────────────────────────────
+  /// Tira ou escolhe uma foto e envia.
+  ///
+  /// A redução acontece no aparelho: foto de celular passa de 4 MB e o
+  /// teto de corpo da API é 2 MB. 1600 px é folgado para o card, que
+  /// mostra no máximo 900.
+  Future<void> _escolherFoto(ImageSource origem) async {
+    final arquivo = await ImagePicker().pickImage(
+      source: origem,
+      maxWidth: 1600,
+      maxHeight: 1600,
+      imageQuality: 85,
+    );
+    if (arquivo == null || !mounted) return;
+
+    setState(() {
+      _mexendoNaFoto = true;
+      _erro = null;
+    });
+
+    final bytes = await arquivo.readAsBytes();
+    final r = await PeixeService.enviarFoto(
+      widget.especie['id'] as String, bytes,
+    );
+    if (!mounted) return;
+
+    setState(() {
+      _mexendoNaFoto = false;
+      if (r['sucesso'] == true) {
+        // A resposta já traz o endereço novo da foto, com a identidade
+        // dela dentro, e é isso que faz a imagem trocar na tela em vez
+        // de ficar a antiga em cache.
+        _ficha = r['dados'] as Map<String, dynamic>;
+      } else {
+        _erro = r['erro'] as String?;
+      }
+    });
+  }
+
+  Future<void> _removerFoto() async {
+    setState(() {
+      _mexendoNaFoto = true;
+      _erro = null;
+    });
+
+    final r = await PeixeService.removerFoto(widget.especie['id'] as String);
+    if (!mounted) return;
+
+    if (r['sucesso'] == true) {
+      final atual = await PeixeService.detalhar(widget.especie['id'] as String);
+      if (!mounted) return;
+      if (atual['sucesso'] == true) {
+        _ficha = atual['dados'] as Map<String, dynamic>;
+      }
+    }
+
+    setState(() {
+      _mexendoNaFoto = false;
+      if (r['sucesso'] != true) _erro = r['erro'] as String?;
+    });
+  }
+
+  void _menuDaFoto() {
+    final tem = _ficha['imagem_miniatura'] != null;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppTheme.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (contexto) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_rounded,
+                  color: AppTheme.primaria),
+              title: const Text('Tirar foto do aquário'),
+              subtitle: const Text(
+                'A foto do peixe que você realmente vende',
+                style: TextStyle(fontSize: 12),
+              ),
+              onTap: () {
+                Navigator.pop(contexto);
+                _escolherFoto(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded,
+                  color: AppTheme.primaria),
+              title: const Text('Escolher da galeria'),
+              onTap: () {
+                Navigator.pop(contexto);
+                _escolherFoto(ImageSource.gallery);
+              },
+            ),
+            if (tem)
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded,
+                    color: AppTheme.error),
+                title: const Text('Remover foto'),
+                subtitle: const Text(
+                  'A espécie volta a entrar na busca automática',
+                  style: TextStyle(fontSize: 12),
+                ),
+                onTap: () {
+                  Navigator.pop(contexto);
+                  _removerFoto();
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFoto() {
+    final caminho = _ficha['imagem_miniatura']?.toString();
+    final credito = _ficha['imagem_credito']?.toString();
+    final tem = caminho != null && caminho.isNotEmpty;
+
+    return Row(
+      children: [
+        if (_mexendoNaFoto)
+          Container(
+            width: 76,
+            height: 76,
+            decoration: BoxDecoration(
+              color: AppTheme.superficieSuave,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2.2, color: AppTheme.primaria),
+              ),
+            ),
+          )
+        else
+          FotoEspecie(
+            caminho: caminho,
+            cor: AppTheme.superficieAzul,
+            tamanho: 76,
+            circular: false,
+            proporcaoIcone: 0.38,
+          ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextButton.icon(
+                onPressed: _mexendoNaFoto ? null : _menuDaFoto,
+                icon: Icon(
+                  tem ? Icons.swap_horiz_rounded : Icons.add_a_photo_outlined,
+                  size: 18,
+                ),
+                label: Text(tem ? 'Trocar foto' : 'Adicionar foto'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.primaria,
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+              Text(
+                credito != null && credito.isNotEmpty
+                    ? credito
+                    : 'Sem foto. A sua vale mais que a do acervo livre: '
+                        'o cliente quer ver o peixe que você vende.',
+                style: const TextStyle(
+                    fontSize: 11.5, color: AppTheme.textoFraco, height: 1.3),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Map<String, dynamic> _corpo() {
     final dados = <String, dynamic>{};
     for (final campo in [..._camposNumericos.keys, ..._escolhas.keys]) {
@@ -684,6 +896,8 @@ class _FormularioState extends State<_Formulario> {
 
         const SizedBox(height: 18),
         _secao('Identificação'),
+        _buildFoto(),
+        const SizedBox(height: 14),
         TextField(
           controller: _nome,
           textCapitalization: TextCapitalization.words,

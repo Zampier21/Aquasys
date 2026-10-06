@@ -229,8 +229,14 @@ class TestCatalogoAponta:
         catalogo = client.get("/peixes/", headers=cab_loja).json()
         peixe = next(e for e in catalogo if e["id"] == str(especie_com_foto.id))
 
-        assert peixe["imagem"] == f"/peixes/{especie_com_foto.id}/imagem"
-        assert peixe["imagem_miniatura"].endswith("tamanho=miniatura")
+        # O `v` é a identidade da foto, e existe para o endereço mudar
+        # quando a foto muda. Sem ele, trocar a foto de um peixe não
+        # apareceria: a resposta é guardada por trinta dias.
+        assert peixe["imagem"].startswith(
+            f"/peixes/{especie_com_foto.id}/imagem?v="
+        )
+        assert "tamanho=miniatura" in peixe["imagem_miniatura"]
+        assert "&v=" in peixe["imagem_miniatura"]
         # A licença CC exige exibir o crédito onde a foto aparece.
         assert peixe["imagem_credito"] == "Fulano de Tal (CC BY-SA 4.0)"
 
@@ -264,7 +270,8 @@ class TestCatalogoAponta:
         habitantes = client.get(
             f"/peixes/aquario/{aquario['id']}", headers=cab_loja
         ).json()
-        assert habitantes[0]["imagem_miniatura"].endswith("tamanho=miniatura")
+        assert "tamanho=miniatura" in habitantes[0]["imagem_miniatura"]
+        assert "&v=" in habitantes[0]["imagem_miniatura"]
 
 
 class TestPesoDoCatalogo:
