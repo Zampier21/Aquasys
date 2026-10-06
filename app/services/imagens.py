@@ -15,6 +15,26 @@ from PIL import Image, ImageOps
 LADO_MINIATURA = 192
 MAIOR_LADO_COMPLETA = 900
 
+# Largura que pedimos ao Commons. O servidor deles gera a miniatura, e
+# é por isso que este número existe.
+#
+# Antes baixávamos o arquivo original, e isso derrubou o servidor com
+# erro 502 durante um lote de fotos. Medindo os originais de seis
+# espécies do catálogo: de 5 a 10 megapixels, arquivos de até 7 MB. O
+# Pillow precisa de cerca de 29 MB só para abrir um de 10 MP, e faz
+# cópias no caminho (girar pelo EXIF, achatar transparência,
+# redimensionar). Num servidor de 512 MB que já carrega o índice da
+# FishBase, uma foto grande basta para matar o processo.
+#
+# Pedir 1200 resolve na origem: chega um arquivo de algumas centenas de
+# kilobytes, e é mais do que os 900 que o card usa.
+LARGURA_PEDIDA = 1200
+
+# Teto de segurança para imagem que venha de outro caminho, como a foto
+# que a loja envia. 40 MP são cerca de 120 MB de bitmap, e nada que o
+# AquaSys mostre precisa disso.
+MAXIMO_DE_PIXELS = 40_000_000
+
 QUALIDADE_COMPLETA = 85
 QUALIDADE_MINIATURA = 82
 
@@ -55,6 +75,24 @@ class FonteIndisponivel(Exception):
 def preparar(bruto: bytes) -> ImagemPronta:
     try:
         original = Image.open(io.BytesIO(bruto))
+    except Exception as erro:
+        raise ImagemInvalida(f"não deu para abrir a imagem: {erro}") from erro
+
+    # Conferido ANTES de `load()`, que é quem descomprime. Depois já
+    # seria tarde: o estouro de memória acontece exatamente ali.
+    largura, altura = original.size
+    if largura * altura > MAXIMO_DE_PIXELS:
+        raise ImagemInvalida(
+            "imagem grande demais: %d x %d. O limite é %d megapixels."
+            % (largura, altura, MAXIMO_DE_PIXELS // 1_000_000)
+        )
+
+    # Para JPEG, o `draft` manda o decodificador já entregar reduzido,
+    # em vez de montar o bitmap inteiro para depois encolher. Não faz
+    # nada nos outros formatos, e não atrapalha.
+    original.draft("RGB", (MAIOR_LADO_COMPLETA, MAIOR_LADO_COMPLETA))
+
+    try:
         original.load()
     except Exception as erro:
         raise ImagemInvalida(f"não deu para abrir a imagem: {erro}") from erro
@@ -250,6 +288,9 @@ def _detalhes_do_arquivo(cliente: httpx.Client, titulo: str) -> Optional[FotoEnc
         "titles": titulo,
         "prop": "imageinfo",
         "iiprop": "url|extmetadata",
+        # Faz o Commons devolver também `thumburl`, já reduzida no
+        # servidor deles. Ver LARGURA_PEDIDA.
+        "iiurlwidth": LARGURA_PEDIDA,
         "format": "json",
     })
 
@@ -260,8 +301,12 @@ def _detalhes_do_arquivo(cliente: httpx.Client, titulo: str) -> Optional[FotoEnc
             continue
 
         info = infos[0]
-        url = info.get("url", "")
-        if not _e_imagem(url):
+        # `thumburl` é a versão reduzida pelo Commons; `url` é o
+        # original, que pode ter 10 megapixels. A reduzida vem primeiro,
+        # e o original fica de reserva para o caso raro de o Commons não
+        # conseguir gerar miniatura (alguns formatos antigos).
+        url = info.get("thumburl") or info.get("url", "")
+        if not _e_imagem(info.get("url", "")):
             continue
 
         credito = _extrair_credito(info.get("extmetadata", {}), titulo)
@@ -315,6 +360,7 @@ def _busca_no_commons(cliente: httpx.Client, termo: str) -> Optional[FotoEncontr
         "gsrlimit": 5,
         "prop": "imageinfo",
         "iiprop": "url|extmetadata",
+        "iiurlwidth": LARGURA_PEDIDA,
         "format": "json",
     })
 

@@ -284,3 +284,73 @@ class TestPesoDoCatalogo:
         resposta = client.get("/peixes/", headers=cab_loja)
         assert resposta.status_code == 200
         assert len(resposta.content) < 60_000
+
+
+# ═══════════════════════════════════════════════════════
+# MEMÓRIA: O QUE CAUSOU UM 502 EM PRODUÇÃO
+# ═══════════════════════════════════════════════════════
+class TestTamanhoDaOrigem:
+    """Baixar o original do Commons matou o servidor de 512 MB.
+
+    Medindo seis espécies do catálogo, os originais tinham de 5 a 10
+    megapixels e arquivos de até 7 MB. O Pillow precisa de uns 29 MB só
+    para abrir um de 10 MP, e faz cópias para girar pelo EXIF, achatar
+    transparência e redimensionar. Num lote de fotos, o processo morria
+    e o Render respondia 502.
+
+    A correção foi pedir ao Commons a versão já reduzida por ele.
+    Depois dela, o pico medido por foto caiu para 1,6 MB.
+    """
+
+    def test_pede_a_largura_reduzida_ao_commons(self):
+        """`iiurlwidth` é o que faz o Commons gerar a miniatura."""
+        assert imagens.LARGURA_PEDIDA >= imagens.MAIOR_LADO_COMPLETA
+        # Pedir menos do que o card mostra entregaria foto borrada.
+        assert imagens.LARGURA_PEDIDA <= 2000
+
+    def test_prefere_a_reduzida_quando_ela_vem(self, monkeypatch):
+        def responder(cliente, url, params):
+            return {"query": {"pages": {"1": {"imageinfo": [{
+                "url": "https://upload.wikimedia.org/Peixe.jpg",
+                "thumburl": "https://upload.wikimedia.org/thumb/Peixe.jpg",
+                "extmetadata": {
+                    "LicenseShortName": {"value": "CC BY-SA 4.0"},
+                    "Artist": {"value": "Fulano"},
+                },
+            }]}}}}
+
+        monkeypatch.setattr(imagens, "_pedir", responder)
+        achado = imagens._detalhes_do_arquivo(None, "File:Peixe.jpg")
+
+        assert achado is not None
+        assert "/thumb/" in achado.url
+
+    def test_cai_para_o_original_se_nao_houver_reduzida(self, monkeypatch):
+        """Alguns formatos antigos o Commons não consegue reduzir."""
+        def responder(cliente, url, params):
+            return {"query": {"pages": {"1": {"imageinfo": [{
+                "url": "https://upload.wikimedia.org/Peixe.jpg",
+                "extmetadata": {
+                    "LicenseShortName": {"value": "CC BY-SA 4.0"},
+                    "Artist": {"value": "Fulano"},
+                },
+            }]}}}}
+
+        monkeypatch.setattr(imagens, "_pedir", responder)
+        achado = imagens._detalhes_do_arquivo(None, "File:Peixe.jpg")
+
+        assert achado is not None
+        assert achado.url.endswith("/Peixe.jpg")
+
+    def test_recusa_imagem_absurda_antes_de_descomprimir(self):
+        """A recusa precisa vir antes do `load()`, que é quem estoura."""
+        enorme = imagem_teste(largura=9000, altura=6000)
+
+        # 54 MP passa do teto de 40 MP.
+        with pytest.raises(imagens.ImagemInvalida) as erro:
+            imagens.preparar(enorme)
+        assert "grande demais" in str(erro.value)
+
+    def test_imagem_grande_mas_dentro_do_teto_passa(self):
+        pronta = imagens.preparar(imagem_teste(largura=3000, altura=2000))
+        assert pronta.largura <= imagens.MAIOR_LADO_COMPLETA
