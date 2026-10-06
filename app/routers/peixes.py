@@ -2,6 +2,7 @@ import unicodedata
 from typing import List, Optional
 from uuid import UUID
 
+import logging
 from fastapi import (
     APIRouter, Depends, Header, HTTPException, Query, Request, Response, status,
 )
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_usuario_atual
 from app.database import get_db
 from app.routers.aquarios import regerar_alertas
+
 from app.models.aquario import Aquario
 from app.models.especie import (
     AquarioEspecie, CompatibEspecie, Especie, EspecieImagem,
@@ -19,15 +21,18 @@ from app.models.usuario import Usuario
 from app.schemas.especie import (
     AnaliseResponse, CandidatoImportacao, CompatividadeResumo, EspecieCreate,
     EspecieIncompleta, EspecieResponse, EspecieUpdate, ImportacaoResponse,
-    ItemImportado, ResumoGravacao, VariedadeResumo,
+    ItemImportado, ResumoFotos, ResumoGravacao, VariedadeResumo,
     HabitanteResponse, PovoamentoCreate, PovoamentoUpdate,
 )
+from app.services import imagens as svc_imagens
 from app.services import importacao as svc_importacao
 from app.services import variedades as svc_variedades
 from app.services.compatibilidade import (
     MOTIVOS_IMPEDITIVOS, Nivel, avaliar_adicao, avaliar_especie_no_aquario,
     campos_faltantes,
 )
+
+log = logging.getLogger("aquasys.peixes")
 
 router = APIRouter()
 
@@ -757,6 +762,101 @@ def _minha_especie(especie_id: UUID, usuario: Usuario, db: Session) -> Especie:
 
 # Declarada ANTES de /{especie_id}: o FastAPI casa na ordem de escrita,
 # e "incompletas" seria engolido como identificador.
+# ═══════════════════════════════════════════════════════
+# FOTOS DAS ESPÉCIES IMPORTADAS
+# ═══════════════════════════════════════════════════════
+# Em lote e por rodadas, e não tudo de uma vez. Medido: cada foto leva
+# cerca de 3,5 segundos entre procurar no Wikimedia Commons, baixar e
+# gerar as duas versões. Uma lista de 58 peixes levaria três minutos e
+# meio numa única requisição, que estouraria o tempo do servidor e
+# deixaria o celular girando sem resposta.
+#
+# Em rodadas, cada chamada cabe em meio minuto, a tela mostra progresso
+# e o que já baixou fica gravado mesmo se a pessoa fechar no meio.
+TETO_POR_RODADA = 10
+
+
+@router.post("/fotos/buscar", response_model=ResumoFotos)
+def buscar_fotos(
+    limite: int = Query(
+        default=5, ge=1, le=TETO_POR_RODADA,
+        description="Quantas espécies tentar nesta rodada.",
+    ),
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual),
+):
+    """Procura foto livre para as espécies da loja que ainda não têm.
+
+    As fotos vêm do Wikimedia Commons, com crédito e licença gravados
+    junto, porque elas são publicadas sob licenças que exigem
+    atribuição. A busca é pelo nome científico primeiro, que é único:
+    "Betta" acha de tudo, "Betta splendens" acha o peixe certo.
+
+    Só mexe no catálogo da própria loja. As espécies curadas do AquaSys
+    já têm foto, e não seria da loja alterá-las.
+    """
+    if usuario.tipo != "dono":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Apenas contas empresariais buscam fotos do catálogo",
+        )
+
+    ja_tem = db.query(EspecieImagem.especie_id).subquery()
+    pendentes = (
+        db.query(Especie)
+        .filter(
+            Especie.dono_id == usuario.id,
+            Especie.ativo.is_(True),
+            Especie.variante_de_id.is_(None),
+            ~Especie.id.in_(ja_tem.select()),
+        )
+        .order_by(Especie.nome_comum)
+        .all()
+    )
+
+    rodada = pendentes[:limite]
+    baixadas, nao_encontradas = 0, []
+
+    cliente = svc_imagens._cliente()
+    try:
+        for especie in rodada:
+            # A parte que pode falhar acontece FORA do banco: procurar
+            # no Commons, baixar e redimensionar. Assim, quando falha,
+            # não há nada escrito para desfazer, e some a tentação de
+            # chamar `db.rollback()` aqui dentro — que desfaria a
+            # transação inteira, e não só esta espécie.
+            try:
+                resultado = svc_imagens.obter(
+                    especie.nome_cientifico, especie.nome_comum, cliente
+                )
+            except Exception:
+                # O Commons às vezes devolve arquivo que não abre. Isso
+                # é dado de terceiro, não defeito daqui, e não derruba
+                # a rodada.
+                log.exception("falha ao buscar foto de %s", especie.nome_comum)
+                resultado = None
+
+            if resultado is None:
+                nao_encontradas.append(especie.nome_comum)
+                continue
+
+            # Daqui para baixo só roda o que já deu certo. Commit por
+            # espécie: um problema na quinta não joga fora as quatro
+            # anteriores.
+            svc_imagens.gravar(db, especie, *resultado)
+            db.commit()
+            baixadas += 1
+    finally:
+        cliente.close()
+
+    return ResumoFotos(
+        tentadas=len(rodada),
+        baixadas=baixadas,
+        restantes=len(pendentes) - baixadas,
+        nao_encontradas=nao_encontradas,
+    )
+
+
 @router.get("/incompletas", response_model=List[EspecieIncompleta])
 def especies_incompletas(
     db: Session = Depends(get_db),

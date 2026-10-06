@@ -30,30 +30,8 @@ def _especies(db, filtro: str | None, refazer: bool, limite: int | None):
 
 
 def _gravar(db, especie, pronta: svc.ImagemPronta, achado) -> None:
-    """Insere ou substitui a linha da imagem daquela espécie."""
-    linha = (
-        db.query(EspecieImagem)
-        .filter(EspecieImagem.especie_id == especie.id)
-        .first()
-    )
-    if linha is None:
-        linha = EspecieImagem(especie_id=especie.id)
-        db.add(linha)
-
-    linha.miniatura = pronta.miniatura
-    linha.completa = pronta.completa
-    linha.mime = svc.MIME
-    linha.hash = pronta.hash
-    linha.largura = pronta.largura
-    linha.altura = pronta.altura
-    linha.bytes_miniatura = len(pronta.miniatura)
-    linha.bytes_completa = len(pronta.completa)
-
-    linha.fonte = achado.fonte if achado else None
-    linha.autor = achado.autor if achado else None
-    linha.licenca = achado.licenca if achado else None
-    linha.licenca_url = achado.licenca_url if achado else None
-
+    """Grava e confirma. A regra mora no serviço; aqui só o commit."""
+    svc.gravar(db, especie, pronta, achado)
     db.commit()
 
 

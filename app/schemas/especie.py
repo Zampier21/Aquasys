@@ -156,6 +156,22 @@ class EspecieIncompleta(BaseModel):
     faltam: List[str] = []
 
 
+class ResumoFotos(BaseModel):
+    """O que uma rodada de busca de fotos conseguiu."""
+
+    # Quantas espécies foram tentadas nesta chamada.
+    tentadas: int
+    # Dessas, quantas ganharam foto.
+    baixadas: int
+    # Quantas continuam sem foto depois desta rodada, incluindo as que
+    # acabaram de falhar. A tela repete a chamada enquanto for maior
+    # que zero, e para quando duas rodadas seguidas não baixarem nada.
+    restantes: int
+    # Nome das que não foram encontradas, para a loja saber quais vai
+    # precisar resolver à mão.
+    nao_encontradas: List[str] = []
+
+
 class VariedadeResumo(BaseModel):
     """Uma variedade dentro do card da espécie-base.
 

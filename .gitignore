@@ -2,6 +2,10 @@
 # Segredos — NUNCA versionar
 # ═══════════════════════════════════════════════════════
 .env
+# Cópias do banco. Levam dados de usuário dentro, inclusive CPF, e o
+# repositório é público.
+*.dump
+*.sql.gz
 .env.local
 .env.*.local
 *.pem

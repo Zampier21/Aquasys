@@ -30,6 +30,15 @@ class _TelaRevisarEspeciesState extends State<TelaRevisarEspecies> {
   // Ficha aberta no formulário. Nulo mostra a fila.
   Map<String, dynamic>? _aberta;
 
+  // ─── Busca de fotos ───
+  // Roda por rodadas de cinco, porque cada foto leva uns 3,5 segundos
+  // entre procurar no Commons, baixar e redimensionar. A tela mostra o
+  // andamento em vez de ficar parada esperando.
+  bool _buscandoFotos = false;
+  int _fotosBaixadas = 0;
+  int _fotosRestantes = 0;
+  final List<String> _semFoto = [];
+
   @override
   void initState() {
     super.initState();
@@ -53,6 +62,54 @@ class _TelaRevisarEspeciesState extends State<TelaRevisarEspecies> {
         _erro = r['erro'] as String?;
       }
     });
+  }
+
+  /// Busca as fotos em rodadas, até acabar ou parar de avançar.
+  ///
+  /// A condição de parada não é só `restantes == 0`: espécie que o
+  /// Commons não conhece nunca vai ter foto, e sem a segunda condição
+  /// a tela repetiria a mesma rodada para sempre.
+  Future<void> _buscarFotos() async {
+    setState(() {
+      _buscandoFotos = true;
+      _fotosBaixadas = 0;
+      _semFoto.clear();
+    });
+
+    while (mounted) {
+      final r = await PeixeService.buscarFotos(limite: 5);
+      if (!mounted) return;
+
+      if (r['sucesso'] != true) {
+        setState(() {
+          _buscandoFotos = false;
+          _erro = r['erro'] as String?;
+        });
+        return;
+      }
+
+      final d = r['dados'] as Map<String, dynamic>;
+      setState(() {
+        _fotosBaixadas += d['baixadas'] as int;
+        _fotosRestantes = d['restantes'] as int;
+        _semFoto.addAll((d['nao_encontradas'] as List).cast<String>());
+      });
+
+      // Parou de avançar: o que sobrou não está no Commons.
+      if (d['baixadas'] == 0 || d['restantes'] == 0) break;
+    }
+
+    if (!mounted) return;
+    setState(() => _buscandoFotos = false);
+    await _carregar();
+
+    if (!mounted) return;
+    _avisar(
+      _fotosBaixadas == 0
+          ? 'Nenhuma foto nova encontrada.'
+          : '$_fotosBaixadas ${_fotosBaixadas == 1 ? "foto baixada" : "fotos baixadas"}.',
+      _fotosBaixadas == 0 ? AppTheme.alerta : AppTheme.sucesso,
+    );
   }
 
   @override
@@ -121,14 +178,24 @@ class _TelaRevisarEspeciesState extends State<TelaRevisarEspecies> {
       );
     }
 
+    // Mesmo sem ficha a revisar, o painel de fotos continua: espécie
+    // pode estar com a ficha completa e ainda sem foto, e aí o botão
+    // precisa estar alcançável.
     if (_fila.isEmpty) {
-      return const _Recado(
-        icone: Icons.check_circle_outline_rounded,
-        cor: AppTheme.sucesso,
-        titulo: 'Nada a revisar',
-        texto: 'Todas as espécies do seu catálogo estão com a ficha '
-            'conferida. Fichas incompletas aparecem aqui depois de uma '
-            'importação de lista.',
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(20, 28, 20, 28),
+        children: [
+          const _Recado(
+            icone: Icons.check_circle_outline_rounded,
+            cor: AppTheme.sucesso,
+            titulo: 'Nada a revisar',
+            texto: 'Todas as espécies do seu catálogo estão com a ficha '
+                'conferida. Fichas incompletas aparecem aqui depois de '
+                'uma importação de lista.',
+          ),
+          const SizedBox(height: 24),
+          _buildFotos(),
+        ],
       );
     }
 
@@ -139,6 +206,8 @@ class _TelaRevisarEspeciesState extends State<TelaRevisarEspecies> {
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
         children: [
           _explicacao(),
+          const SizedBox(height: 12),
+          _buildFotos(),
           const SizedBox(height: 16),
           for (final e in _fila) ...[
             _cartao(e),
@@ -178,6 +247,74 @@ class _TelaRevisarEspeciesState extends State<TelaRevisarEspecies> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Painel de busca de fotos, acima da fila de fichas.
+  ///
+  /// Fica aqui porque é onde a loja já está depois de importar, e
+  /// porque foto e ficha são o mesmo trabalho: deixar a espécie
+  /// apresentável antes de o cliente ver.
+  Widget _buildFotos() {
+    if (_buscandoFotos) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.superficieSuave,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.bordaCard),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2.2, color: AppTheme.primaria),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                _fotosRestantes > 0
+                    ? 'Buscando fotos: $_fotosBaixadas baixadas, '
+                        '$_fotosRestantes na fila'
+                    : 'Buscando fotos...',
+                style: const TextStyle(
+                    fontSize: 12.5, color: AppTheme.azulMedio),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        OutlinedButton.icon(
+          onPressed: _buscarFotos,
+          icon: const Icon(Icons.image_search_rounded, size: 19),
+          label: const Text('Buscar fotos das espécies'),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(0, 46),
+            foregroundColor: AppTheme.azulMedio,
+            side: const BorderSide(color: AppTheme.bordaCampo),
+          ),
+        ),
+        if (_semFoto.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'Sem foto no acervo livre: ${_semFoto.join(", ")}. '
+              'Essas você precisa fotografar na loja.',
+              style: const TextStyle(
+                fontSize: 11.5,
+                color: AppTheme.alertaTexto,
+                height: 1.35,
+              ),
+            ),
+          ),
+      ],
     );
   }
 

@@ -20,6 +20,16 @@ class PeixeService {
       Api.postArquivo('/peixes/importar', bytes,
           query: {'aplicar': aplicar});
 
+  /// Procura foto para as espécies da loja que ainda não têm.
+  ///
+  /// Trabalha por rodadas, e não de uma vez: cada foto leva uns 3,5
+  /// segundos entre procurar no Wikimedia Commons, baixar e gerar as
+  /// duas versões. Uma lista de 58 peixes numa requisição só estouraria
+  /// o tempo do servidor. A tela repete enquanto `restantes` cair.
+  static Future<Map<String, dynamic>> buscarFotos({int limite = 5}) =>
+      Api.post('/peixes/fotos/buscar',
+          query: {'limite': limite}, esperado: 200);
+
   /// Ficha completa de uma espécie.
   ///
   /// A lista de incompletas devolve só o que falta, e não os valores

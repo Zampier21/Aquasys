@@ -368,3 +368,68 @@ def baixar(url: str, cliente: Optional[httpx.Client] = None) -> bytes:
     finally:
         if proprio:
             cliente.close()
+
+
+# ═══════════════════════════════════════════════════════
+# CICLO COMPLETO: ACHAR, BAIXAR, PREPARAR E GRAVAR
+# ═══════════════════════════════════════════════════════
+# Isto morava dentro do `baixar_imagens.py`, como função privada, e era
+# o motivo de a importação pelo aplicativo criar espécie sem foto: o
+# caminho de gravar só existia no script. Agora mora aqui, e os dois
+# usam o mesmo.
+
+
+def obter(
+    nome_cientifico: Optional[str],
+    nome_comum: Optional[str] = None,
+    cliente: Optional[httpx.Client] = None,
+) -> Optional[tuple]:
+    """Devolve (ImagemPronta, FotoEncontrada), ou None se não achou.
+
+    Não toca no banco de propósito: quem chama decide o que fazer com o
+    resultado, e assim esta parte continua testável sem banco.
+    """
+    achado = buscar(nome_cientifico, nome_comum, cliente=cliente)
+    if achado is None:
+        return None
+
+    try:
+        bruto = baixar(achado.url, cliente=cliente)
+        return preparar(bruto), achado
+    except (httpx.HTTPError, ImagemInvalida):
+        # Foto encontrada no catálogo mas ilegível ou fora do ar não é
+        # erro do sistema: é como não ter achado.
+        return None
+
+
+def gravar(db, especie, pronta: "ImagemPronta", achado) -> None:
+    """Insere ou substitui a linha de imagem daquela espécie.
+
+    O crédito é gravado junto, e não é enfeite: as fotos do Wikimedia
+    Commons vêm sob licenças que exigem atribuição, e é por estes
+    campos que o aplicativo mostra o autor embaixo da foto.
+    """
+    from app.models.especie import EspecieImagem
+
+    linha = (
+        db.query(EspecieImagem)
+        .filter(EspecieImagem.especie_id == especie.id)
+        .first()
+    )
+    if linha is None:
+        linha = EspecieImagem(especie_id=especie.id)
+        db.add(linha)
+
+    linha.miniatura = pronta.miniatura
+    linha.completa = pronta.completa
+    linha.mime = MIME
+    linha.hash = pronta.hash
+    linha.largura = pronta.largura
+    linha.altura = pronta.altura
+    linha.bytes_miniatura = len(pronta.miniatura)
+    linha.bytes_completa = len(pronta.completa)
+
+    linha.fonte = achado.fonte if achado else None
+    linha.autor = achado.autor if achado else None
+    linha.licenca = achado.licenca if achado else None
+    linha.licenca_url = achado.licenca_url if achado else None
