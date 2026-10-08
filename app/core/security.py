@@ -9,6 +9,8 @@ vulnerável estava instalado sem sequer ser chamado. Sair dele custou
 este arquivo e deixou a auditoria de dependências limpa.
 """
 
+import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -82,3 +84,36 @@ def decodificar_token(token: str) -> dict | None:
         )
     except jwt.PyJWTError:
         return None
+
+
+# ═══════════════════════════════════════════════════════
+# Token de renovação
+# ═══════════════════════════════════════════════════════
+# Diferente do token de acesso, este não é um JWT e não carrega nada
+# dentro: é um número aleatório. Não precisa carregar, porque o que ele
+# significa está na tabela `sessao`, e é lá que se confere. Um JWT aqui
+# seria pior — traria de volta justamente o que se quer evitar, que é um
+# token válido por si só, impossível de revogar.
+BYTES_DO_REFRESH = 32
+
+
+def criar_refresh() -> tuple[str, str]:
+    """Sorteia um token de renovação e devolve (token, hash).
+
+    O token vai para o aparelho e some daqui; o hash é o que se grava.
+    Quem puser as mãos no banco encontra só o hash, que não serve para
+    renovar sessão nenhuma.
+    """
+    token = secrets.token_urlsafe(BYTES_DO_REFRESH)
+    return token, hash_do_refresh(token)
+
+
+def hash_do_refresh(token: str) -> str:
+    """SHA-256 em hexadecimal, que é o que a coluna `hash` guarda.
+
+    SHA-256 puro basta, e bcrypt seria errado aqui: o bcrypt é lento de
+    propósito para resistir a quem adivinha senha humana, e este token
+    tem 256 bits de entropia — não há o que adivinhar. Lentidão só
+    custaria tempo em toda renovação.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()

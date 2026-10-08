@@ -35,9 +35,6 @@ class Api {
     Map<String, dynamic>? query,
   }) async {
     try {
-      final cabecalhos = await AuthService.headers();
-      cabecalhos['Content-Type'] = tipo;
-
       var uri = Uri.parse('$baseUrl$rota');
       if (query != null && query.isNotEmpty) {
         uri = uri.replace(
@@ -48,11 +45,20 @@ class Api {
         );
       }
 
-      final resposta = await http.post(
-        uri,
-        headers: cabecalhos,
-        body: bytes,
-      );
+      Future<http.Response> disparar() async {
+        final cabecalhos = await AuthService.headers();
+        cabecalhos['Content-Type'] = tipo;
+        return http.post(uri, headers: cabecalhos, body: bytes);
+      }
+
+      var resposta = await disparar();
+
+      // A importação de um CSV grande é justamente onde a hora costuma
+      // estourar, porque a loja deixa a tela aberta enquanto prepara o
+      // arquivo.
+      if (resposta.statusCode == 401 && await AuthService.renovar()) {
+        resposta = await disparar();
+      }
 
       if (resposta.statusCode != 200) {
         return {'sucesso': false, 'erro': _traduzirErro(resposta)};
@@ -98,16 +104,29 @@ class Api {
         );
       }
 
-      final cabecalhos = await AuthService.headers();
       final json = corpo == null ? null : jsonEncode(corpo);
 
-      final resposta = switch (metodo) {
-        'POST' => await http.post(uri, headers: cabecalhos, body: json),
-        'PUT' => await http.put(uri, headers: cabecalhos, body: json),
-        'PATCH' => await http.patch(uri, headers: cabecalhos, body: json),
-        'DELETE' => await http.delete(uri, headers: cabecalhos),
-        _ => await http.get(uri, headers: cabecalhos),
-      };
+      // Os cabeçalhos são lidos a cada disparo, e não uma vez só: o
+      // segundo disparo precisa levar o token novo.
+      Future<http.Response> disparar() async {
+        final cabecalhos = await AuthService.headers();
+        return switch (metodo) {
+          'POST' => await http.post(uri, headers: cabecalhos, body: json),
+          'PUT' => await http.put(uri, headers: cabecalhos, body: json),
+          'PATCH' => await http.patch(uri, headers: cabecalhos, body: json),
+          'DELETE' => await http.delete(uri, headers: cabecalhos),
+          _ => await http.get(uri, headers: cabecalhos),
+        };
+      }
+
+      var resposta = await disparar();
+
+      // O token de acesso vale uma hora e pode vencer no meio do uso.
+      // Quando isso acontece, renova e repete — uma vez só. Repetir em
+      // laço esconderia um 401 que é de permissão, não de validade.
+      if (resposta.statusCode == 401 && await AuthService.renovar()) {
+        resposta = await disparar();
+      }
 
       // 200 e 201 são ambos sucesso: POST devolve 201, mas nem toda rota
       // segue isso à risca, e a tela não deveria se importar.

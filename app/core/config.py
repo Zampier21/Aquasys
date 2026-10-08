@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    # Quanto tempo o aparelho continua reconhecido sem pedir senha.
+    # Trinta dias e o prazo tipico; alonga-lo nao enfraquece como
+    # alongar o token de acesso, porque esta sessao e revogavel.
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     YOUTUBE_API_KEY: Optional[str] = None
 
     # ─── Aplicação ────────────────────────────────────

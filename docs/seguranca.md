@@ -129,6 +129,41 @@ agora é passado explicitamente. Sem essa lista, um token forjado com
 `alg: none` seria aceito — é a falha clássica de implementação de JWT,
 e `test_token_sem_assinatura_e_recusado` a cobre.
 
+### Sessão renovável, acrescentada depois
+
+O token de acesso vale uma hora, e isso jogava o usuário de volta na
+tela de login a cada hora. A saída preguiçosa seria alongar o prazo,
+mas um JWT não se revoga: emitido com trinta dias, vale trinta dias
+para quem o tiver, e perder o celular significaria perder a conta até
+o prazo acabar.
+
+O que se fez foi o par de tokens. O de acesso continua curto e sem
+estado. Um segundo token, de longa duração, serve só para pedir um
+novo, e está registrado na tabela `sessao` — por estar em tabela, é
+revogável, e o logout revoga.
+
+Três decisões merecem registro:
+
+- **Guarda-se o hash, não o token.** SHA-256, pela mesma razão da
+  senha: se este banco vazar, o que está nele não abre sessão nenhuma.
+  Não se usa bcrypt aqui porque o token tem 256 bits sorteados — não
+  há o que adivinhar, e a lentidão do bcrypt só custaria tempo.
+- **A sessão é rotacionada.** Cada renovação emite um token novo e
+  marca o antigo como usado.
+- **Reúso derruba tudo.** Se um token já usado reaparecer, existem
+  duas cópias em circulação e não há como saber qual é a do dono: o
+  servidor revoga todas as sessões daquela conta. O usuário legítimo
+  refaz o login; quem copiou fica de fora. É o caso coberto por
+  `test_reuso_derruba_todas_as_sessoes`, e é a razão de a rotação
+  existir.
+
+A rotação criou uma armadilha no cliente, que vale anotar porque não é
+óbvia: se a tela disparar três requisições em paralelo e as três
+tomarem 401, as três tentariam renovar, a primeira passaria e as
+outras duas chegariam com o token já gasto — e o usuário seria
+deslogado pela própria proteção contra roubo. O aplicativo guarda a
+renovação em curso e faz as demais esperarem por ela.
+
 ## 7. Restringir acessos
 
 Havia um problema real aqui:
