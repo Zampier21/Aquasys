@@ -8,6 +8,10 @@
 *.sql.gz
 .env.local
 .env.*.local
+# Qualquer copia do .env: backup de rotacao de chave, .env.old, .env.bak.
+# O .env.example e a excecao, porque so tem nome de variavel.
+.env.*
+!.env.example
 *.pem
 *.key
 
@@ -75,3 +79,5 @@ aquasys_app/macos/Flutter/ephemeral/
 Thumbs.db
 Desktop.ini
 .DS_Store
+# Backups do proprio repositorio, criados antes de reescrever historico.
+*.bundle
